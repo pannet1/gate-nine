@@ -1,32 +1,44 @@
-{"timestamp": "2026-10-17T08:58:17.728836+00:00", "test_id": "001", "action": "run_start", "details": {"run_dir": "test-cases/001", "steps": 20}}
-{"timestamp": "2026-10-17T08:58:18.995443+00:00", "test_id": "001", "action": "sign_in", "details": {"user": "pannet1@gmail.com"}}
-{"timestamp": "2026-10-17T08:58:19.599664+00:00", "test_id": "001", "action": "sign_in_ok", "details": {"url": "https://rachis.co.in/dashboard/"}}
-{"timestamp": "2026-10-17T08:58:19.599852+00:00", "test_id": "001", "action": "step_ok", "details": {"id": "0", "action": "sign-in", "detail": ""}}
-{"timestamp": "2026-10-17T08:58:23.039679+00:00", "test_id": "001", "action": "open_voucher", "details": {"case": "sales-invoice", "route": "/accounting/sales-invoices/new/", "heading": "Sales Invoice"}}
-{"timestamp": "2026-10-17T08:58:23.040010+00:00", "test_id": "001", "action": "step_ok", "details": {"id": "1", "action": "open-new", "detail": ""}}
-{"timestamp": "2026-10-17T08:58:26.394411+00:00", "test_id": "001", "action": "open_voucher", "details": {"case": "purchase-bill", "route": "/accounting/bills/new/", "heading": "Purchase Bill"}}
-{"timestamp": "2026-10-17T08:58:26.394677+00:00", "test_id": "001", "action": "step_ok", "details": {"id": "2", "action": "open-new", "detail": ""}}
-{"timestamp": "2026-10-17T08:58:29.717052+00:00", "test_id": "001", "action": "open_voucher", "details": {"case": "goods-receipt", "route": "/accounting/grns/new/", "heading": "Goods Receipt"}}
-{"timestamp": "2026-10-17T08:58:29.717252+00:00", "test_id": "001", "action": "step_ok", "details": {"id": "3", "action": "open-new", "detail": ""}}
-{"timestamp": "2026-10-17T08:58:33.074954+00:00", "test_id": "001", "action": "open_voucher", "details": {"case": "sales-invoice", "route": "/accounting/sales-invoices/new/", "heading": "Sales Invoice"}}
-{"timestamp": "2026-10-17T08:58:33.075130+00:00", "test_id": "001", "action": "step_ok", "details": {"id": "4", "action": "open-new", "detail": ""}}
-{"timestamp": "2026-10-17T08:58:36.434674+00:00", "test_id": "001", "action": "open_voucher", "details": {"case": "purchase-bill", "route": "/accounting/bills/new/", "heading": "Purchase Bill"}}
-{"timestamp": "2026-10-17T08:58:36.434989+00:00", "test_id": "001", "action": "step_ok", "details": {"id": "5", "action": "open-new", "detail": ""}}
-{"timestamp": "2026-10-17T08:58:39.438847+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "6", "action": "add-line", "detail": "no handler for action 'add-line'"}}
-{"timestamp": "2026-10-17T08:58:42.442391+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "7", "action": "set-line-discount", "detail": "no handler for action 'set-line-discount'"}}
-{"timestamp": "2026-10-17T08:58:45.445918+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "8", "action": "set-header-discount", "detail": "no handler for action 'set-header-discount'"}}
-{"timestamp": "2026-10-17T08:58:48.449569+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "9", "action": "reject-header-discount", "detail": "no handler for action 'reject-header-discount'"}}
-{"timestamp": "2026-10-17T08:58:51.789612+00:00", "test_id": "001", "action": "open_voucher", "details": {"case": "purchase-bill", "route": "/accounting/bills/new/", "heading": "Purchase Bill"}}
-{"timestamp": "2026-10-17T08:58:51.789935+00:00", "test_id": "001", "action": "step_ok", "details": {"id": "10", "action": "open-new", "detail": ""}}
-{"timestamp": "2026-10-17T08:58:55.116654+00:00", "test_id": "001", "action": "open_voucher", "details": {"case": "credit-note", "route": "/accounting/credit-notes/new/", "heading": "Credit Note"}}
-{"timestamp": "2026-10-17T08:58:55.116898+00:00", "test_id": "001", "action": "step_ok", "details": {"id": "11", "action": "open-new", "detail": ""}}
-{"timestamp": "2026-10-17T08:58:58.479530+00:00", "test_id": "001", "action": "open_voucher", "details": {"case": "debit-note", "route": "/accounting/debit-notes/new/", "heading": "Debit Note"}}
-{"timestamp": "2026-10-17T08:58:58.479720+00:00", "test_id": "001", "action": "step_ok", "details": {"id": "12", "action": "open-new", "detail": ""}}
-{"timestamp": "2026-10-17T08:59:01.483144+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "13", "action": "verify-tax", "detail": "no handler for action 'verify-tax'"}}
-{"timestamp": "2026-10-17T08:59:04.486785+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "14", "action": "verify-tax", "detail": "no handler for action 'verify-tax'"}}
-{"timestamp": "2026-10-17T08:59:07.490300+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "15", "action": "verify-tax", "detail": "no handler for action 'verify-tax'"}}
-{"timestamp": "2026-10-17T08:59:10.493914+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "16", "action": "draft-post-correct", "detail": "no handler for action 'draft-post-correct'"}}
-{"timestamp": "2026-10-17T08:59:13.497534+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "17a", "action": "print", "detail": "no handler for action 'print'"}}
-{"timestamp": "2026-10-17T08:59:16.501190+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "17b", "action": "print", "detail": "no handler for action 'print'"}}
-{"timestamp": "2026-10-17T08:59:19.503519+00:00", "test_id": "001", "action": "step_no_handler", "details": {"id": "17c", "action": "print", "detail": "no handler for action 'print'"}}
-{"timestamp": "2026-10-17T08:59:19.654193+00:00", "test_id": "001", "action": "run_result", "details": {"ok": 9, "no-handler": 11, "failed": null}}
+{"timestamp": "2026-10-17T21:43:10.798581+00:00", "action": "run_start", "details": {"run_folder": "001", "run_dir": "test-cases/001", "steps": 20}}
+{"timestamp": "2026-10-17T21:43:11.961433+00:00", "action": "sign_in", "details": {"run_folder": "001", "user": "pannet1@gmail.com"}}
+{"timestamp": "2026-10-17T21:43:12.479204+00:00", "action": "sign_in_ok", "details": {"run_folder": "001", "url": "https://rachis.co.in/dashboard/"}}
+{"timestamp": "2026-10-17T21:43:12.479414+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 1, "action": "sign-in", "type": null, "case": "login", "detail": ""}}
+{"timestamp": "2026-10-17T21:43:15.858967+00:00", "action": "open_voucher", "details": {"run_folder": "001", "case": "sales-invoice", "route": "/accounting/sales-invoices/new/", "heading": "Sales Invoice"}}
+{"timestamp": "2026-10-17T21:43:15.859191+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 2, "action": "open", "type": "new-voucher", "case": "sales-invoice", "detail": ""}}
+{"timestamp": "2026-10-17T21:43:19.240027+00:00", "action": "open_voucher", "details": {"run_folder": "001", "case": "purchase-bill", "route": "/accounting/bills/new/", "heading": "Purchase Bill"}}
+{"timestamp": "2026-10-17T21:43:19.240270+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 3, "action": "open", "type": "new-voucher", "case": "purchase-bill", "detail": ""}}
+{"timestamp": "2026-10-17T21:43:22.587643+00:00", "action": "open_voucher", "details": {"run_folder": "001", "case": "goods-receipt", "route": "/accounting/grns/new/", "heading": "Goods Receipt"}}
+{"timestamp": "2026-10-17T21:43:22.587884+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 4, "action": "open", "type": "new-voucher", "case": "goods-receipt", "detail": ""}}
+{"timestamp": "2026-10-17T21:43:25.928322+00:00", "action": "open_voucher", "details": {"run_folder": "001", "case": "sales-invoice", "route": "/accounting/sales-invoices/new/", "heading": "Sales Invoice"}}
+{"timestamp": "2026-10-17T21:43:25.928519+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 5, "action": "open", "type": "new-voucher", "case": "sales-invoice", "detail": ""}}
+{"timestamp": "2026-10-17T21:43:29.251908+00:00", "action": "open_voucher", "details": {"run_folder": "001", "case": "purchase-bill", "route": "/accounting/bills/new/", "heading": "Purchase Bill"}}
+{"timestamp": "2026-10-17T21:43:29.252176+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 6, "action": "open", "type": "new-voucher", "case": "purchase-bill", "detail": ""}}
+{"timestamp": "2026-10-17T21:43:32.255464+00:00", "action": "input", "details": {"run_folder": "001", "name": "item", "value": "Hamam", "form": "sales-invoice"}}
+{"timestamp": "2026-10-17T21:43:32.978821+00:00", "action": "input", "details": {"run_folder": "001", "name": "qty", "value": "2", "form": "sales-invoice"}}
+{"timestamp": "2026-10-17T21:43:33.261173+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 7, "action": "input", "type": null, "case": "sales-invoice", "detail": "input ['item', 'qty']:['Hamam', '2']"}}
+{"timestamp": "2026-10-17T21:43:36.264641+00:00", "action": "input", "details": {"run_folder": "001", "name": "discount", "value": "10", "form": "sales-invoice"}}
+{"timestamp": "2026-10-17T21:43:36.358974+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 8, "action": "input", "type": "line-discount", "case": "sales-invoice", "detail": "input discount:10"}}
+{"timestamp": "2026-10-17T21:43:39.362578+00:00", "action": "input", "details": {"run_folder": "001", "name": "header-discount", "value": "5", "form": "sales-invoice"}}
+{"timestamp": "2026-10-17T21:43:39.382211+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 9, "action": "input", "type": "header-discount", "case": "sales-invoice", "detail": "input header-discount:5"}}
+{"timestamp": "2026-10-17T21:43:42.383532+00:00", "action": "click", "details": {"run_folder": "001", "target": "✕", "form": "sales-invoice"}}
+{"timestamp": "2026-10-17T21:43:42.411577+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 10, "action": "click", "type": "header-discount", "case": "sales-invoice", "detail": "click ✕"}}
+{"timestamp": "2026-10-17T21:43:45.780091+00:00", "action": "open_voucher", "details": {"run_folder": "001", "case": "purchase-bill", "route": "/accounting/bills/new/", "heading": "Purchase Bill"}}
+{"timestamp": "2026-10-17T21:43:45.780410+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 11, "action": "open", "type": "new-voucher", "case": "purchase-bill", "detail": ""}}
+{"timestamp": "2026-10-17T21:43:49.066561+00:00", "action": "open_voucher", "details": {"run_folder": "001", "case": "credit-note", "route": "/accounting/credit-notes/new/", "heading": "Credit Note"}}
+{"timestamp": "2026-10-17T21:43:49.066779+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 12, "action": "open", "type": "new-voucher", "case": "credit-note", "detail": ""}}
+{"timestamp": "2026-10-17T21:43:52.329491+00:00", "action": "open_voucher", "details": {"run_folder": "001", "case": "debit-note", "route": "/accounting/debit-notes/new/", "heading": "Debit Note"}}
+{"timestamp": "2026-10-17T21:43:52.329855+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 13, "action": "open", "type": "new-voucher", "case": "debit-note", "detail": ""}}
+{"timestamp": "2026-10-17T21:43:55.333229+00:00", "action": "verify", "details": {"run_folder": "001", "type": "tax", "form": "sales-invoice"}}
+{"timestamp": "2026-10-17T21:43:55.333446+00:00", "action": "step_ok", "details": {"run_folder": "001", "step_number": 14, "action": "verify", "type": "tax", "case": "sales-invoice", "detail": "verified tax"}}
+{"timestamp": "2026-10-17T21:43:58.335244+00:00", "action": "verify", "details": {"run_folder": "001", "type": "tax", "form": "sales-invoice"}}
+{"timestamp": "2026-10-17T21:43:58.335514+00:00", "action": "step_ok", "details": {"run_folder": "001", "step_number": 15, "action": "verify", "type": "tax", "case": "sales-invoice", "detail": "verified tax"}}
+{"timestamp": "2026-10-17T21:44:01.338839+00:00", "action": "verify", "details": {"run_folder": "001", "type": "tax", "form": "credit-note"}}
+{"timestamp": "2026-10-17T21:44:01.339027+00:00", "action": "step_ok", "details": {"run_folder": "001", "step_number": 16, "action": "verify", "type": "tax", "case": "credit-note", "detail": "verified tax"}}
+{"timestamp": "2026-10-17T21:44:04.342392+00:00", "action": "click", "details": {"run_folder": "001", "target": "Save draft", "form": "sales-invoice"}}
+{"timestamp": "2026-10-17T21:44:04.408063+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 17, "action": "click", "type": "voucher", "case": "sales-invoice", "detail": "click Save draft"}}
+{"timestamp": "2026-10-17T21:44:07.411522+00:00", "action": "click", "details": {"run_folder": "001", "target": "Print", "form": "sales-invoice"}}
+{"timestamp": "2026-10-17T21:44:07.432038+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 18, "action": "click", "type": "voucher", "case": "sales-invoice", "detail": "click Print"}}
+{"timestamp": "2026-10-17T21:44:10.435557+00:00", "action": "click", "details": {"run_folder": "001", "target": "Print", "form": "purchase-bill"}}
+{"timestamp": "2026-10-17T21:44:10.450948+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 19, "action": "click", "type": "voucher", "case": "purchase-bill", "detail": "click Print"}}
+{"timestamp": "2026-10-17T21:44:13.452656+00:00", "action": "click", "details": {"run_folder": "001", "target": "Print", "form": "credit-note"}}
+{"timestamp": "2026-10-17T21:44:13.468772+00:00", "action": "step_setup", "details": {"run_folder": "001", "step_number": 20, "action": "click", "type": "voucher", "case": "credit-note", "detail": "click Print"}}
+{"timestamp": "2026-10-17T21:44:13.634174+00:00", "action": "run_result", "details": {"run_folder": "001", "ok": 3, "setup": 17, "no-handler": 0, "failed": null, "status": "passed"}}

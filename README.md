@@ -5,8 +5,7 @@ Gate Nine is a human-supervised black-box testing harness for the remote
 does not require access to Rachis source code, internal APIs, or its database.
 
 The current workflow and design decisions are maintained in the repository
-root [`index.html`](index.html). The refactor backlog is in
-[`docs/REFACTOR.md`](docs/REFACTOR.md).
+root [`index.html`](index.html).
 
 ## Safety rules
 
@@ -66,8 +65,7 @@ uv run python -m app.driver
 The target main loop reads the highest-numbered run under `test-cases/`, parses
 its `test.html` plan, opens a visible Chromium window, and appends activity to
 the root `events.jsonl` while the run is active, then archives it inside the
-completed run folder. The current implementation is being brought into this
-workflow; the details are tracked in [`docs/REFACTOR.md`](docs/REFACTOR.md).
+completed run folder. The workflow is maintained in [`index.html`](index.html).
 
 To follow events in a second terminal:
 
@@ -100,7 +98,7 @@ is active.
 - `test-cases/` — numbered run folders containing briefs, plans, and links to
   the cases under test;
 - `events.jsonl` — temporary root event log, archived into the completed run;
-- `docs/` — architecture, design, repository guidance, and refactor notes;
+- `docs/` — design and repository guidance;
 - `install.sh` — one-step local setup; and
 - `run.sh` — one-step FastAPI startup.
 
@@ -119,6 +117,6 @@ The tests cover plan parsing, run discovery, route mapping, and event logging.
 Live tenant behavior requires credentials and a visible
 browser, so it is not part of the local unit-test suite.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) before adding modules or
+See [`index.html`](index.html) before adding modules or
 changing the run lifecycle.
 

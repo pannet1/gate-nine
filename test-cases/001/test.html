@@ -41,20 +41,20 @@ folder's <code>test-case.html</code> and nowhere else.</p>
     <tr><td>3</td><td>Test 1</td><td>open new-voucher</td><td class="covered">goods-receipt/</td></tr>
     <tr><td>4</td><td>Test 2</td><td>open new-voucher</td><td class="covered">sales-invoice/</td></tr>
     <tr><td>5</td><td>Test 2</td><td>open new-voucher</td><td class="covered">purchase-bill/</td></tr>
-    <tr><td>6</td><td>Test 3</td><td>add line</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>7</td><td>Test 3</td><td>set line-discount</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>8</td><td>Test 4</td><td>set header-discount</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>9</td><td>Test 4</td><td>reject header-discount</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>6</td><td>Test 3</td><td>input [item, qty]</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>7</td><td>Test 3</td><td>input line-discount</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>8</td><td>Test 4</td><td>input header-discount</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>9</td><td>Test 4</td><td>click reject header-discount</td><td class="covered">sales-invoice/</td></tr>
     <tr><td>10</td><td>Test 4</td><td>open new-voucher</td><td class="covered">purchase-bill/</td></tr>
     <tr><td>11</td><td>Test 4</td><td>open new-voucher</td><td class="covered">credit-note/</td></tr>
     <tr><td>12</td><td>Test 4</td><td>open new-voucher</td><td class="covered">debit-note/</td></tr>
     <tr><td>13</td><td>Test 5</td><td>verify tax</td><td class="covered">sales-invoice/</td></tr>
     <tr><td>14</td><td>Test 5</td><td>verify tax</td><td class="covered">sales-invoice/</td></tr>
     <tr><td>15</td><td>Test 5</td><td>verify tax</td><td class="covered">credit-note/</td></tr>
-    <tr><td>16</td><td>Test 6</td><td>draft</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>17</td><td>Test 7</td><td>print</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>18</td><td>Test 7</td><td>print</td><td class="covered">purchase-bill/</td></tr>
-    <tr><td>19</td><td>Test 7</td><td>print</td><td class="covered">credit-note/</td></tr>
+    <tr><td>16</td><td>Test 6</td><td>click Save draft</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>17</td><td>Test 7</td><td>click Print</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>18</td><td>Test 7</td><td>click Print</td><td class="covered">purchase-bill/</td></tr>
+    <tr><td>19</td><td>Test 7</td><td>click Print</td><td class="covered">credit-note/</td></tr>
 </table>
 <p class="note"><strong>Phase order is dependency order, not preference.</strong> Later tests
 assume vouchers posted by earlier ones: the header discount (Test 4) needs lines already
@@ -137,20 +137,20 @@ expected results, because those belong to each case folder and to nowhere else.<
     {"phase": "A", "test": "Test 1", "action": "open", "type": "new-voucher", "case": "goods-receipt"},
     {"phase": "B", "test": "Test 2", "action": "open", "type": "new-voucher", "case": "sales-invoice"},
     {"phase": "B", "test": "Test 2", "action": "open", "type": "new-voucher", "case": "purchase-bill"},
-    {"phase": "C", "test": "Test 3", "action": "add", "type": "line", "case": "sales-invoice"},
-    {"phase": "C", "test": "Test 3", "action": "set", "type": "line-discount", "case": "sales-invoice"},
-    {"phase": "D", "test": "Test 4", "action": "set", "type": "header-discount", "case": "sales-invoice"},
-    {"phase": "D", "test": "Test 4", "action": "reject", "type": "header-discount", "case": "sales-invoice"},
+    {"phase": "C", "test": "Test 3", "action": "input", "name": ["item", "qty"], "value": ["Hamam", "2"], "case": "sales-invoice"},
+    {"phase": "C", "test": "Test 3", "action": "input", "name": "discount", "value": "10", "type": "line-discount", "case": "sales-invoice"},
+    {"phase": "D", "test": "Test 4", "action": "input", "name": "header-discount", "value": "5", "type": "header-discount", "case": "sales-invoice"},
+    {"phase": "D", "test": "Test 4", "action": "click", "target": "reject header-discount", "type": "header-discount", "case": "sales-invoice"},
     {"phase": "D", "test": "Test 4", "action": "open", "type": "new-voucher", "case": "purchase-bill"},
     {"phase": "D", "test": "Test 4", "action": "open", "type": "new-voucher", "case": "credit-note"},
     {"phase": "D", "test": "Test 4", "action": "open", "type": "new-voucher", "case": "debit-note"},
     {"phase": "E", "test": "Test 5", "action": "verify", "type": "tax", "case": "sales-invoice"},
     {"phase": "E", "test": "Test 5", "action": "verify", "type": "tax", "case": "sales-invoice"},
     {"phase": "E", "test": "Test 5", "action": "verify", "type": "tax", "case": "credit-note"},
-    {"phase": "F", "test": "Test 6", "action": "draft", "type": "voucher", "case": "sales-invoice"},
-    {"phase": "G", "test": "Test 7", "action": "print", "type": "voucher", "case": "sales-invoice"},
-    {"phase": "G", "test": "Test 7", "action": "print", "type": "voucher", "case": "purchase-bill"},
-    {"phase": "G", "test": "Test 7", "action": "print", "type": "voucher", "case": "credit-note"}
+    {"phase": "F", "test": "Test 6", "action": "click", "target": "Save draft", "type": "voucher", "case": "sales-invoice"},
+    {"phase": "G", "test": "Test 7", "action": "click", "target": "Print", "type": "voucher", "case": "sales-invoice"},
+    {"phase": "G", "test": "Test 7", "action": "click", "target": "Print", "type": "voucher", "case": "purchase-bill"},
+    {"phase": "G", "test": "Test 7", "action": "click", "target": "Print", "type": "voucher", "case": "credit-note"}
   ]
 }
 </script>

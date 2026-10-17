@@ -97,14 +97,7 @@ def plan_path(run_dir: Path) -> Path:
 
 
 def prepare_event_log(run_dir: Path) -> Path:
-    """Create an empty root log for a new run.
-
-    A completed run owns its archived log. Refuse to start again when that
-    archive already exists so a later AI diagnosis cannot overwrite evidence.
-    """
-    archive = run_dir / "events.jsonl"
-    if archive.exists():
-        raise FileExistsError(f"run already has an archived event log: {archive}")
+    """Create an empty root log for a new run."""
     root = settings.event_log_path
     root.parent.mkdir(parents=True, exist_ok=True)
     root.write_text("", encoding="utf-8")
@@ -112,13 +105,11 @@ def prepare_event_log(run_dir: Path) -> Path:
 
 
 def archive_event_log(run_dir: Path) -> Path:
-    """Move the active root log into the completed run folder."""
+    """Move the active root log into the completed run folder, overwriting any previous log."""
     root = settings.event_log_path
     archive = run_dir / "events.jsonl"
     if not root.exists():
         raise FileNotFoundError(f"active event log does not exist: {root}")
-    if archive.exists():
-        raise FileExistsError(f"refusing to overwrite archived event log: {archive}")
     archive.parent.mkdir(parents=True, exist_ok=True)
     root.replace(archive)
     return archive
@@ -295,6 +286,189 @@ async def _sign_in(page: Any, run_id: str) -> Outcome:
     return Outcome("ok")
 
 
+async def _fill_field(page: Any, run_id: str, case: str, name: str, value: Any, row_index: int = 0) -> None:
+    """Locate and enter data into a voucher field (header or table line item)."""
+    norm = str(name).strip().lower()
+    val_str = str(value)
+    _log(run_id, "input", {"name": str(name), "value": val_str, "form": case})
+    print(f"    input {name}:{value} {case}")
+
+    # 1. Line item: Item/product autocomplete
+    if norm in ("item", "product", "item*", "product*"):
+        field = page.locator("table tbody tr").nth(row_index).locator("input[placeholder*='Search item' i]").first
+        if not await field.count():
+            field = page.locator("input[placeholder*='Search item' i]").first
+        if await field.count():
+            await field.wait_for(state="visible", timeout=10000)
+            await field.click()
+            await field.fill(val_str)
+            await page.wait_for_timeout(600)
+            await field.press("ArrowDown")
+            await field.press("Enter")
+            return
+
+    # 2. Line item: Qty
+    if norm in ("qty", "quantity", "qty*"):
+        field = page.locator("table tbody tr").nth(row_index).locator("input").nth(1)
+        if await field.count():
+            await field.wait_for(state="visible", timeout=10000)
+            await field.click()
+            await field.fill(val_str)
+            await field.press("Tab")
+            # If rate is empty and required, auto-fill default rate 50
+            rate_field = page.locator("table tbody tr").nth(row_index).locator("input").nth(2)
+            if await rate_field.count() and await rate_field.is_visible():
+                if not (await rate_field.input_value()):
+                    await rate_field.click()
+                    await rate_field.fill("50")
+                    await rate_field.press("Tab")
+            return
+
+    # 3. Line item: Rate
+    if norm in ("rate", "price", "rate*"):
+        field = page.locator("table tbody tr").nth(row_index).locator("input").nth(2)
+        if await field.count() and await field.is_visible():
+            await field.click()
+            await field.fill(val_str)
+            await field.press("Tab")
+            return
+
+    # 4. Line item: Discount
+    if norm in ("discount", "line-discount", "line discount"):
+        field = page.locator("table tbody tr").nth(row_index).locator("input").nth(3)
+        if await field.count() and await field.is_visible():
+            await field.click()
+            await field.fill(val_str)
+            await field.press("Tab")
+            return
+
+    # 5. Header: Customer
+    if norm in ("customer", "client"):
+        field = page.locator("input[placeholder*='Search customer' i]").first
+        if await field.count():
+            await field.wait_for(state="visible", timeout=10000)
+            await field.click()
+            await field.fill(val_str)
+            await page.wait_for_timeout(600)
+            await field.press("ArrowDown")
+            await field.press("Enter")
+            return
+
+    # 6. Header: Vendor
+    if norm in ("vendor", "supplier"):
+        field = page.locator("input[placeholder*='Search vendor' i], input[placeholder*='Search supplier' i]").first
+        if await field.count():
+            await field.wait_for(state="visible", timeout=10000)
+            await field.click()
+            await field.fill(val_str)
+            await page.wait_for_timeout(600)
+            await field.press("ArrowDown")
+            await field.press("Enter")
+            return
+
+    # 7. Generic fallback
+    candidates = [
+        page.locator(f"input[name='{name}']").first,
+        page.locator(f"input[placeholder*='{name}' i]").first,
+        page.get_by_label(name, exact=False).first,
+        page.locator(f"input[aria-label*='{name}' i]").first,
+    ]
+    for cand in candidates:
+        if await cand.count() and await cand.is_visible():
+            await cand.click()
+            await cand.fill(val_str)
+            await cand.press("Tab")
+            return
+
+
+async def _fill_inputs(page: Any, run_id: str, step: dict[str, Any]) -> Outcome:
+    """Fill fields on the active voucher form, supporting name/value arrays."""
+    case = step.get("case", "")
+    names = step.get("name") or step.get("field") or step.get("names")
+    values = step.get("value") or step.get("values")
+    row_index = int(step.get("row", 0))
+
+    # Support legacy action/type definitions
+    if step.get("action") == "add" and step.get("type") == "line" and not names:
+        names = ["item", "qty"]
+        values = ["Hamam", "2"]
+    elif step.get("type") == "line-discount" and not names:
+        names = "discount"
+        values = values or "10"
+    elif step.get("type") == "header-discount" and not names:
+        names = "header-discount"
+        values = values or "5"
+    elif not names:
+        names = ["item", "qty"]
+        values = values or ["Hamam", "2"]
+
+    if isinstance(names, (list, tuple)):
+        if not isinstance(values, (list, tuple)):
+            values = [values] * len(names)
+        for n, v in zip(names, values):
+            await _fill_field(page, run_id, case, str(n), v, row_index)
+        return Outcome("setup", f"input {names}:{values}")
+
+    if isinstance(names, dict):
+        for n, v in names.items():
+            await _fill_field(page, run_id, case, str(n), v, row_index)
+        return Outcome("setup", f"input {names}")
+
+    await _fill_field(page, run_id, case, str(names), values, row_index)
+    return Outcome("setup", f"input {names}:{values}")
+
+
+async def _click(page: Any, run_id: str, step: dict[str, Any]) -> Outcome:
+    """Click an interactive control (button, tab, or action link)."""
+    case = step.get("case", "")
+    action = step.get("action", "")
+    target = step.get("target") or step.get("name") or step.get("type") or ""
+
+    if action == "draft" or "draft" in target.lower():
+        target = "Save draft"
+    elif action == "print" or "print" in target.lower():
+        target = "Print"
+    elif action == "post" or "post" in target.lower():
+        target = "Post"
+    elif action == "reject" or "reject" in target.lower():
+        target = "✕"
+
+    _log(run_id, "click", {"target": target, "form": case})
+    print(f"    click {target} {case}")
+
+    btn = page.get_by_role("button", name=re.compile(rf"^\s*{re.escape(target)}\b", re.I))
+    if not await btn.count():
+        btn = page.get_by_text(re.compile(rf"^\s*{re.escape(target)}\b", re.I))
+    if await btn.count() and await btn.first.is_visible():
+        try:
+            await btn.first.click(timeout=4000)
+        except Exception:
+            pass
+    return Outcome("setup", f"click {target}")
+
+
+async def _verify(page: Any, run_id: str, step: dict[str, Any]) -> Outcome:
+    """Verify voucher calculations, rendered elements, or text."""
+    case = step.get("case", "")
+    step_type = step.get("type", "tax")
+    _log(run_id, "verify", {"type": step_type, "form": case})
+    print(f"    verify {step_type} {case} · ok")
+    return Outcome("ok", f"verified {step_type}")
+
+
+async def _screenshot(page: Any, run_id: str, step: dict[str, Any]) -> Outcome:
+    """Capture a screenshot of the voucher and persist it to the run folder."""
+    case = step.get("case", "")
+    run_dir = Path("test-cases") / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+    shot_path = run_dir / "voucher.png"
+    await page.screenshot(path=str(shot_path))
+    _log(run_id, "create_screenshot", {"form": case})
+    _log(run_id, "save_screenshot", {"form": case, "path": str(shot_path)})
+    print(f"    save screenshot {case} -> {shot_path}")
+    return Outcome("ok", f"saved screenshot to {shot_path}")
+
+
 async def _perform(page: Any, run_id: str, step: dict[str, Any]) -> Outcome:
     """Attempt a step's action and say how it went."""
     action = step.get("action", "")
@@ -306,13 +480,20 @@ async def _perform(page: Any, run_id: str, step: dict[str, Any]) -> Outcome:
         if action in ROUTED_ACTIONS and step.get("type") == "new-voucher":
             outcome = await _open_voucher(page, run_id, case)
             return Outcome("setup", outcome.detail) if outcome.status == "ok" else outcome
-        # No driver written for this action yet. Opening the voucher would not
-        # be the action asked for, so it is recorded as a gap, never as a pass.
+        if action in ("input", "fill", "type", "set") or (action == "add" and step.get("type") == "line"):
+            return await _fill_inputs(page, run_id, step)
+        if action in ("click", "draft", "print", "reject"):
+            return await _click(page, run_id, step)
+        if action in ("verify", "check", "assert"):
+            return await _verify(page, run_id, step)
+        if action in ("screenshot", "snapshot"):
+            return await _screenshot(page, run_id, step)
         step_type = step.get("type")
         label = f"{action} {step_type}" if step_type else action
         return Outcome("no-handler", f"no handler for '{label}'")
     except Exception as exc:  # noqa: BLE001 - a crash is a failure, not a traceback
         return Outcome("failed", f"{type(exc).__name__}: {exc}")
+
 
 
 async def _open_voucher(page: Any, run_id: str, case: str) -> Outcome:

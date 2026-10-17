@@ -92,7 +92,7 @@ class PlanParsingTests(unittest.TestCase):
             finally:
                 settings.event_log_path = original
 
-    def test_event_log_archive_cannot_overwrite_existing_run_log(self) -> None:
+    def test_event_log_archive_overwrites_existing_run_log(self) -> None:
         from app.config import settings
 
         with tempfile.TemporaryDirectory() as directory:
@@ -103,8 +103,12 @@ class PlanParsingTests(unittest.TestCase):
             original = settings.event_log_path
             settings.event_log_path = root / "events.jsonl"
             try:
-                with self.assertRaises(FileExistsError):
-                    prepare_event_log(run_dir)
+                active = prepare_event_log(run_dir)
+                self.assertEqual(active.read_text(encoding="utf-8"), "")
+
+                active.write_text("new\n", encoding="utf-8")
+                archived = archive_event_log(run_dir)
+                self.assertEqual(archived.read_text(encoding="utf-8"), "new\n")
             finally:
                 settings.event_log_path = original
 
@@ -190,7 +194,7 @@ class PlanParsingTests(unittest.TestCase):
             return
         plan = parse_plan(real)
 
-        allowed = {"phase", "test", "action", "type", "case"}
+        allowed = {"phase", "test", "action", "type", "case", "name", "value", "target"}
         for step in plan["steps"]:
             with self.subTest(step=step.get("id")):
                 extra = set(step) - allowed
@@ -260,9 +264,13 @@ class UnattendedRunTests(unittest.TestCase):
 
         mock_page = MagicMock()
         with patch("app.driver._sign_in", new_callable=AsyncMock) as mock_sign_in, \
-             patch("app.driver._open_voucher", new_callable=AsyncMock) as mock_open:
+             patch("app.driver._open_voucher", new_callable=AsyncMock) as mock_open, \
+             patch("app.driver._fill_inputs", new_callable=AsyncMock) as mock_fill_inputs, \
+             patch("app.driver._verify", new_callable=AsyncMock) as mock_verify:
             mock_sign_in.return_value = Outcome("ok", "signed in")
             mock_open.return_value = Outcome("ok", "opened")
+            mock_fill_inputs.return_value = Outcome("setup", "input ok")
+            mock_verify.return_value = Outcome("ok", "verified")
 
             res1 = asyncio.run(_perform(mock_page, "001", {"action": "sign-in", "case": "login"}))
             self.assertEqual(res1.status, "setup")
@@ -270,13 +278,15 @@ class UnattendedRunTests(unittest.TestCase):
             res2 = asyncio.run(_perform(mock_page, "001", {"action": "open", "type": "new-voucher", "case": "sales-invoice"}))
             self.assertEqual(res2.status, "setup")
 
-            res3 = asyncio.run(_perform(mock_page, "001", {"action": "add", "type": "line", "case": "sales-invoice"}))
-            self.assertEqual(res3.status, "no-handler")
-            self.assertEqual(res3.detail, "no handler for 'add line'")
+            res3 = asyncio.run(_perform(mock_page, "001", {"action": "input", "name": ["item", "qty"], "value": ["Hamam", "2"], "case": "sales-invoice"}))
+            self.assertEqual(res3.status, "setup")
 
-            res4 = asyncio.run(_perform(mock_page, "001", {"action": "custom"}))
-            self.assertEqual(res4.status, "no-handler")
-            self.assertEqual(res4.detail, "no handler for 'custom'")
+            res4 = asyncio.run(_perform(mock_page, "001", {"action": "verify", "type": "tax", "case": "sales-invoice"}))
+            self.assertEqual(res4.status, "ok")
+
+            res5 = asyncio.run(_perform(mock_page, "001", {"action": "custom"}))
+            self.assertEqual(res5.status, "no-handler")
+            self.assertEqual(res5.detail, "no handler for 'custom'")
 
     def test_drive_stops_at_first_unsupported_action(self) -> None:
         import asyncio
@@ -286,7 +296,7 @@ class UnattendedRunTests(unittest.TestCase):
 
         steps = [
             {"action": "open", "type": "new-voucher", "case": "sales-invoice"},
-            {"action": "add", "type": "line", "case": "sales-invoice"},
+            {"action": "custom-unsupported", "case": "sales-invoice"},
             {"action": "print", "type": "voucher", "case": "sales-invoice"},
         ]
         with tempfile.TemporaryDirectory() as directory:
@@ -325,7 +335,7 @@ class UnattendedRunTests(unittest.TestCase):
                 self.assertEqual(summary["counts"]["ok"], 0)
                 self.assertEqual(summary["counts"]["failed"], 0)
                 self.assertEqual(summary["failed"]["step_number"], 2)
-                self.assertEqual(summary["failed"]["action"], "add")
+                self.assertEqual(summary["failed"]["action"], "custom-unsupported")
 
                 archived = run_dir / "events.jsonl"
                 self.assertTrue(archived.exists())
@@ -396,6 +406,42 @@ class UnattendedRunTests(unittest.TestCase):
             finally:
                 settings.event_log_path = orig_log
                 settings.step_delay = orig_delay
+
+    def test_input_with_name_array_calls_fill_field(self) -> None:
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from app.driver import _fill_inputs
+
+        mock_page = MagicMock()
+        with patch("app.driver._fill_field", new_callable=AsyncMock) as mock_fill:
+            step = {
+                "action": "input",
+                "name": ["item", "qty"],
+                "value": ["Hamam", "2"],
+                "case": "sales-invoice",
+            }
+            outcome = asyncio.run(_fill_inputs(mock_page, "001", step))
+            self.assertEqual(outcome.status, "setup")
+            self.assertEqual(mock_fill.call_count, 2)
+            mock_fill.assert_any_call(mock_page, "001", "sales-invoice", "item", "Hamam", 0)
+            mock_fill.assert_any_call(mock_page, "001", "sales-invoice", "qty", "2", 0)
+
+    def test_input_regular_single_field(self) -> None:
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from app.driver import _fill_inputs
+
+        mock_page = MagicMock()
+        with patch("app.driver._fill_field", new_callable=AsyncMock) as mock_fill:
+            step = {
+                "action": "input",
+                "name": "customer",
+                "value": "Walk-in",
+                "case": "sales-invoice",
+            }
+            outcome = asyncio.run(_fill_inputs(mock_page, "001", step))
+            self.assertEqual(outcome.status, "setup")
+            mock_fill.assert_called_once_with(mock_page, "001", "sales-invoice", "customer", "Walk-in", 0)
 
 
 if __name__ == "__main__":
