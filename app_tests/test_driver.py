@@ -67,10 +67,31 @@ class PlanParsingTests(unittest.TestCase):
         plan = parse_plan(real)
 
         unrouted = sorted({
-            s["voucher"] for s in plan["steps"]
-            if s.get("action") in self.ROUTED_ACTIONS and route_for(s["voucher"]) is None
+            s["case"] for s in plan["steps"]
+            if s.get("action") in self.ROUTED_ACTIONS and route_for(s["case"]) is None
         })
-        self.assertEqual(unrouted, [], f"vouchers with no route: {unrouted}")
+        self.assertEqual(unrouted, [], f"cases with no route: {unrouted}")
+
+    def test_plan_carries_order_and_no_method(self) -> None:
+        """The plan orders the cases; the cases hold the method.
+
+        A step must not grow a check or expected-result field — that is the
+        how-to-test, and it lives in app/vouchers/<case>/test-case.html only.
+        """
+        real = Path("test-cases/001/test.html")
+        if not real.is_file():
+            self.skipTest("run 001 not present")
+            return
+        plan = parse_plan(real)
+
+        allowed = {"id", "phase", "test", "action", "case"}
+        for step in plan["steps"]:
+            with self.subTest(step=step.get("id")):
+                extra = set(step) - allowed
+                self.assertEqual(
+                    extra, set(),
+                    f"step carries method fields, which belong to the case: {sorted(extra)}",
+                )
 
     def test_plan_opens_with_sign_in(self) -> None:
         """Every run begins at the login form, before any voucher is touched."""
@@ -111,7 +132,7 @@ class PlanParsingTests(unittest.TestCase):
 
         self.assertTrue(plan["steps"], "plan has no steps")
         for step in plan["steps"]:
-            for field in ("id", "action", "voucher", "check"):
+            for field in ("id", "action", "case"):
                 self.assertIn(field, step, f"step missing {field}: {step}")
 
 

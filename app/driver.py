@@ -28,6 +28,10 @@ from .events import append_event
 HEADLESS = False
 PLAN_MARKER = 'id="plan"'
 
+# The marketing homepage is served at the base URL, so signing in has to reach
+# this route explicitly rather than assuming the landing page is the app.
+LOGIN_ROUTE = "/login/"
+
 # New-voucher routes, read off the live tenant 2026-10-17. The plan's voucher
 # names are normalised before lookup, so "GRN" reaches the route whose own
 # heading reads "Goods Receipt".
@@ -41,14 +45,18 @@ VOUCHER_ROUTES = {
 }
 
 
-def _normalise(voucher: str) -> str:
-    """Fold a plan's voucher name down to its lookup key."""
-    return re.sub(r"\s+", " ", voucher).strip().lower()
+def _normalise(case: str) -> str:
+    """Fold a case folder name down to its route lookup key.
+
+    Folders are hyphenated slugs — sales-invoice, goods-receipt — and routes
+    are keyed on spaced names, so hyphens and runs of space fold together.
+    """
+    return re.sub(r"[\s-]+", " ", case).strip().lower()
 
 
-def route_for(voucher: str) -> str | None:
-    """The new-voucher route for a plan's voucher name, or None if unknown."""
-    return VOUCHER_ROUTES.get(_normalise(voucher))
+def route_for(case: str) -> str | None:
+    """The new-voucher route for a case folder, or None if it has none."""
+    return VOUCHER_ROUTES.get(_normalise(case))
 
 
 def parse_plan(test_html: Path) -> dict[str, Any]:
@@ -72,9 +80,14 @@ def plan_path(run_dir: Path) -> Path:
 
 
 def announce(step: dict[str, Any], index: int, total: int) -> None:
-    print(f"\n[{index}/{total}] step {step['id']} · {step.get('test', '')} · {step.get('action', '')}")
-    print(f"    voucher: {step.get('voucher', '?')}")
-    print(f"    check:   {step.get('check', '')}")
+    """Name the step and point at its case folder — never restate the method.
+
+    How to test lives in app/vouchers/<case>/test-case.html and nowhere else.
+    The plan carries the order; the case carries the steps.
+    """
+    case = step.get("case", "")
+    print(f"\n[{index}/{total}] step {step['id']} · {step.get('action', '')} · {case}/")
+    print(f"    method:  app/vouchers/{case}/test-case.html")
 
 
 async def prompt() -> str:
@@ -98,11 +111,8 @@ async def drive(run_dir: Path) -> dict[str, Any]:
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=HEADLESS)
         page = await browser.new_page()
-        await page.goto(settings.rachis_base_url, wait_until="domcontentloaded")
-        _log(run_id, "open_url", {"url": settings.rachis_base_url})
-        signed_in = await _sign_in(page, run_id)
-        if signed_in != "ok":
-            print(f"    ! {signed_in}")
+        # No bootstrap sign-in here. The plan's sign-in step owns it, so a run
+        # logs one POST rather than one here and another at step 0.
 
         index = 0
         while index < len(steps):
@@ -156,9 +166,18 @@ async def _sign_in(page: Any, run_id: str) -> str:
     Returns 'ok' when signed in or already inside, and a reason to hand over
     when it cannot tell. The tenant's login form is POST-based with fields
     `email` and `password`; nothing here is submitted anywhere else.
+
+    The base URL is the marketing site, not the app, so landing on it is not
+    evidence of being signed in — the login route has to be reached first.
     """
     if "login" not in page.url:
-        return "ok"  # already inside — no form to fill
+        await page.goto(
+            settings.rachis_base_url.rstrip("/") + LOGIN_ROUTE, wait_until="domcontentloaded"
+        )
+        # Already inside and bounced onward? Then there is nothing to fill.
+        if "login" not in page.url:
+            _log(run_id, "sign_in_ok", {"url": page.url, "already": True})
+            return "ok"
 
     email = page.locator("input[type=email]")
     password = page.locator("input[type=password]")
@@ -193,32 +212,32 @@ async def _sign_in(page: Any, run_id: str) -> str:
 async def _perform(page: Any, run_id: str, step: dict[str, Any]) -> str:
     """Attempt a step's action. Returns 'ok' or a human-readable reason it needs a human."""
     action = step.get("action", "")
-    voucher = step.get("voucher", "")
+    case = step.get("case", "")
     try:
         if action == "sign-in":
             return await _sign_in(page, run_id)
         if action in {"open-new", "print", "draft-post-correct"}:
-            return await _open_voucher(page, run_id, voucher)
+            return await _open_voucher(page, run_id, case)
         return (
-            f"no handler for action '{action}' on {voucher} — the voucher handlers are not "
+            f"no handler for action '{action}' on {case}/ — the case handlers are not "
             "written yet, so this step is yours"
         )
     except Exception as exc:  # noqa: BLE001 - a failed action must hand over, not crash
         return f"step failed: {type(exc).__name__}: {exc}"
 
 
-async def _open_voucher(page: Any, run_id: str, voucher: str) -> str:
-    """Open a blank voucher by navigating to its route.
+async def _open_voucher(page: Any, run_id: str, case: str) -> str:
+    """Open a blank voucher by navigating to its case folder's route.
 
     Route-first rather than control-first: a new-voucher button is not present
     on every page, so label-hunting only worked when one happened to be on
-    screen. Navigation works from anywhere. A voucher with no known route still
+    screen. Navigation works from anywhere. A case with no known route still
     falls through to label-hunting, and failing that becomes an intervention
     point rather than a wrong click.
 
     Routes confirmed against the live tenant on 2026-10-17.
     """
-    route = VOUCHER_ROUTES.get(_normalise(voucher))
+    route = route_for(case)
     if route:
         await page.goto(settings.rachis_base_url.rstrip("/") + route, wait_until="domcontentloaded")
         # The tenant is client-rendered, so domcontentloaded lands before the
@@ -230,10 +249,10 @@ async def _open_voucher(page: Any, run_id: str, voucher: str) -> str:
         except Exception:  # noqa: BLE001 - a voucher that never renders hands over
             return f"route {route} never showed a heading — check the window"
         name = (await heading.inner_text()).strip()
-        _log(run_id, "open_voucher", {"voucher": voucher, "route": route, "heading": name})
+        _log(run_id, "open_voucher", {"case": case, "route": route, "heading": name})
         return "ok"
 
-    label = _normalise(voucher)
+    label = _normalise(case)
     candidates = [
         page.get_by_role("link", name=re.compile(label, re.I)),
         page.get_by_role("button", name=re.compile(label, re.I)),
@@ -242,9 +261,9 @@ async def _open_voucher(page: Any, run_id: str, voucher: str) -> str:
     for locator in candidates:
         if await locator.count():
             await locator.first.click(timeout=4000)
-            _log(run_id, "open_voucher", {"voucher": voucher, "via": "label"})
+            _log(run_id, "open_voucher", {"case": case, "via": "label"})
             return "ok"
-    return f"no route for '{label}' and no control on this page — open it yourself"
+    return f"no route for '{case}/' and no control on this page — open it yourself"
 
 
 def _log(run_id: str, action: str, details: dict[str, Any]) -> None:

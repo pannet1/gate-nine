@@ -20,8 +20,9 @@
 <p><strong>Last updated:</strong> 2026-10-17</p>
 <p>This page is the one place the team follows for how this project is designed and
 how it grows. It records the control flow and the conventions around it — not what to
-test or how to test. Those live in the brief and in the generated
-<code>test.html</code>. Update this page in the same change that moves the design forward.</p>
+test or how to test. The brief is the source of what to test; the how lives in
+<code>app/vouchers/&lt;case&gt;/test-case.html</code>, and <code>test.html</code> holds only
+the order in which those cases run. Update this page in the same change that moves the design forward.</p>
 
 <h2>1. Aim</h2>
 <p><strong>To see the browser entering data.</strong> Everything in this project is geared
@@ -71,7 +72,7 @@ highest-numbered folder that already exists.</p>
 <pre>test-cases/
 └── 001/                    # run_id — created by a human
     ├── &lt;any-name&gt;.md       # brief from Murugesan — name is free, only .md matters
-    ├── test.html           # the ordered test plan
+    ├── test.html           # the ordered plan — which case runs when, nothing else
     ├── login           -&gt;  ../../app/vouchers/login
     ├── sales-invoice   -&gt;  ../../app/vouchers/sales-invoice
     ├── purchase-bill   -&gt;  ../../app/vouchers/purchase-bill
@@ -79,6 +80,13 @@ highest-numbered folder that already exists.</p>
     └── credit-note     -&gt;  ../../app/vouchers/credit-note</pre>
 <p>The depth is <code>../../</code>, not <code>../../../</code> — two levels up from the run
 folder reaches the project root.</p>
+<p><strong>The plan carries the order; the case folder carries the method.</strong>
+<code>test.html</code> says which case runs when — step, test number, action, and the folder
+that owns it. It states no steps, no checks, and no expected results, because those belong to
+<code>app/vouchers/&lt;case&gt;/test-case.html</code> and to nowhere else. Putting the how-to
+in the plan as well would mean the same method written twice, drifting apart the moment
+either copy is edited. If a step needs a different method, the case folder changes — not the
+plan.</p>
 <p><strong>Revised in place, not versioned.</strong> A voucher is one live document. A later
 run linking it sees whatever it says now, and revising it for a later run rewrites what an
 earlier run pointed at — accepted, because history is carried by the run's evidence, not by
@@ -228,6 +236,18 @@ real-time progress.</p>
         <code>/dashboard/</code>. The deliberately-wrong-password case is documented but
         not run, because the tenant footer says sign-in events are audited. Corrected
         §3's symlink depth, which still read <code>../../../</code> from before that fix.</td><td>Karthick</td></tr>
+    <tr><td>2026-10-17</td><td><strong>Split the plan from the method.</strong>
+        <code>test.html</code> had carried the how-to in three places — a <em>Check</em>
+        column in every phase table, a <code>check</code> field in each JSON step, and the
+        prose around them. All of it moved out; the plan now states step, test, action and
+        case folder, and nothing else. §3 records the rule: the plan carries the order, the
+        case folder carries the method. Driver reads <code>case</code> rather than a
+        voucher name, so the folder is the single source for routing. A test now fails if a
+        step grows a method field again. <strong>Login also stopped lying:</strong> the base
+        URL serves the marketing site, so <code>_sign_in</code> returned "already inside"
+        on the landing page and step 1 was always bounced back to <code>/login</code>. It
+        now navigates to <code>/login/</code> explicitly. The pre-loop bootstrap is gone —
+        one POST per run, confirmed in the event log, landing on <code>/dashboard/</code>.</td><td>Karthick</td></tr>
 </table>
 
 </body>
