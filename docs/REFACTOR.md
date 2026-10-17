@@ -202,13 +202,17 @@ the case owns the method. For example:
 The schema should preserve the human-readable case document as the source of
 meaning while giving the runner an explicit, testable contract.
 
-### 8. Add post-run AI diagnosis and bug triage
+### 8. Add post-run AI diagnosis and bug triage — gate complete
 
-After a run, the AI must inspect the highest-numbered run folder. When both
+`app.diagnose` now inspects the highest-numbered run folder. When both
 `test.html` and the archived JSONL log exist, it should use them to repair
 harness, plan, or test-data errors through a human-in-the-loop Playwright
 session. If the evidence points to a genuine Rachis defect, it must inform the
 developer instead of silently changing the test.
+
+The read-only evidence gate is implemented and tested. The actual browser
+repair session remains case-specific and must be driven from a concrete
+diagnosis; it is not an autonomous mutation step.
 
 ### 9. Reconcile repository and documentation drift
 

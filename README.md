@@ -75,6 +75,16 @@ To follow events in a second terminal:
 uv run python -m app.watch
 ```
 
+After a run has archived its log, inspect the highest-numbered run for Step D:
+
+```bash
+uv run python -m app.diagnose
+```
+
+This is a read-only diagnosis gate. It reports missing plans, missing archived
+logs, unhandled actions, and failed steps. It does not decide that a product
+bug exists; failures require human-in-loop browser review before escalation.
+
 `app.driver` is the sole browser-plan executor. The FastAPI service remains a
 separate process so it can expose the event log while the visible browser run
 is active.
