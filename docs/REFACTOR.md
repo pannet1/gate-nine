@@ -117,21 +117,7 @@ be available as `passed` when required actions were skipped.
 Relevant code: [`app/driver.py`](../app/driver.py), especially `_perform()` and
 the run summary.
 
-### 3. Implement the human-owned PASS/FAIL lifecycle
-
-The implementation records technical outcomes such as `ok`, `failed`, and
-`no-handler`, but it does not persist the final human verdict described by the
-design.
-
-Separate these concepts:
-
-1. execution result
-2. harness capability or skipped-action status
-3. human PASS/FAIL verdict
-
-Only the human verdict should transition a run to `passed`.
-
-### 4. Implement the run-log lifecycle
+### 3. Implement the run-log lifecycle
 
 The target workflow requires a temporary root JSONL log for the active run.
 The main loop must:
@@ -146,7 +132,7 @@ The main loop must:
 The current implementation still uses `data/events.jsonl`, so this is a
 concrete migration item rather than merely a documentation concern.
 
-### 5. Bring the dashboard up to the documented boundary
+### 4. Bring the dashboard up to the documented boundary
 
 `app/main.py` currently exposes health, a complete event-log snapshot, an
 unrestricted event append endpoint, and a placeholder HTML page. It does not
@@ -161,9 +147,8 @@ provide safe views of:
 - per-step outcomes
 - current evidence
 - event stream
-- human verdict
 
-### 6. Define remote visibility and access control
+### 5. Define remote visibility and access control
 
 The service currently binds to `127.0.0.1`, so remote developers cannot see it
 without an external tunnel or proxy. The event API also has no authentication
@@ -177,7 +162,7 @@ Before remote exposure, choose and document the deployment boundary:
 
 The current arbitrary event-write endpoint must not be exposed directly.
 
-### 7. Implement missing-voucher training and evidence capture
+### 6. Implement missing-voucher training and evidence capture
 
 When the AI finds a voucher referenced by a plan without a canonical case
 document, it must enter a human-in-the-loop browser training flow and create
@@ -192,7 +177,7 @@ item.
 Evidence should be associated with a run, step, and case, with an explicit
 replacement policy and a redaction boundary.
 
-### 8. Define a structured action contract
+### 7. Define a structured action contract
 
 The plan is intentionally order-only: it carries action names and case folders,
 while the detailed instructions remain in the canonical case document. The
@@ -216,7 +201,7 @@ the case owns the method. For example:
 The schema should preserve the human-readable case document as the source of
 meaning while giving the runner an explicit, testable contract.
 
-### 9. Add post-run AI diagnosis and bug triage
+### 8. Add post-run AI diagnosis and bug triage
 
 After a run, the AI must inspect the highest-numbered run folder. When both
 `test.html` and the archived JSONL log exist, it should use them to repair
@@ -224,7 +209,7 @@ harness, plan, or test-data errors through a human-in-the-loop Playwright
 session. If the evidence points to a genuine Rachis defect, it must inform the
 developer instead of silently changing the test.
 
-### 10. Reconcile repository and documentation drift
+### 9. Reconcile repository and documentation drift
 
 Known inconsistencies include:
 
@@ -239,7 +224,7 @@ Known inconsistencies include:
 
 Resolve these as a documentation pass before adding more architecture.
 
-### 11. Harden runtime operations
+### 10. Harden runtime operations
 
 The event log currently has no locking, rotation, pagination, or malformed-line
 recovery. Concurrent writers may interleave, and one corrupt JSONL line can
@@ -251,7 +236,7 @@ latest run simultaneously.
 Add these safeguards only after the canonical runner and lifecycle model are
 settled.
 
-### 12. Protect sensitive data in logs and run-local evidence
+### 11. Protect sensitive data in logs and run-local evidence
 
 Credentials are loaded from environment variables, but there is no systematic
 redaction policy for logs, URLs, screenshots, result data, or dashboard views.
@@ -260,7 +245,7 @@ User identifiers already appear in some event details.
 Define what is safe to log, redact sensitive values centrally, and ensure
 run-local evidence cannot be served accidentally through a public endpoint.
 
-### 13. Establish a reliable verification baseline
+### 12. Establish a reliable verification baseline
 
 The pure planner and event tests pass when dependencies are available. Driver
 and loop tests require Playwright and a correctly provisioned environment. A
@@ -280,18 +265,17 @@ The project needs a repeatable verification baseline including:
 
 Work through the backlog in this order:
 
-1. Define the run state and human PASS/FAIL verdict model.
-2. Decide and enforce the unsupported-action policy.
-3. Implement the root JSONL create/archive lifecycle.
-4. Implement missing-voucher browser training.
-5. Define the structured case action contract.
-6. Implement evidence capture and redaction.
-7. Add post-run AI diagnosis and developer bug triage.
-8. Reconcile documentation and repository shape.
-9. Add the dashboard and event stream.
-10. Add remote access controls.
-11. Harden logging and concurrency.
-12. Expand handler coverage and verification.
+1. Decide and enforce the unsupported-action policy.
+2. Implement the root JSONL create/archive lifecycle.
+3. Implement missing-voucher browser training.
+4. Define the structured case action contract.
+5. Implement evidence capture and redaction.
+6. Add post-run AI diagnosis and developer bug triage.
+7. Reconcile documentation and repository shape.
+8. Add the dashboard and event stream.
+9. Add remote access controls.
+10. Harden logging and concurrency.
+11. Expand handler coverage and verification.
 
 Each item should be reviewed and completed independently before moving to the
 next one.
