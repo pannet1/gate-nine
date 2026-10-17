@@ -14,16 +14,18 @@ internal APIs, or its database.
 ## Quick start
 
 ```bash
-uv python install 3.12
-uv sync
-uv run playwright install chromium
-cp .env.example .env
-# Fill RACHIS_USERNAME and RACHIS_PASSWORD locally.
-uv run uvicorn app.main:app --reload
+./install.sh
+# Fill RACHIS_USERNAME and RACHIS_PASSWORD in .env locally.
+./run.sh
 ```
 
-Use `uv run ...` for all project commands. The project is pinned to Python
-3.12; `uv.lock` records the resolved package versions.
+After cloning, `./install.sh` performs the complete setup: it installs the
+project's Python 3.12 runtime, runs `uv sync`, installs the Chromium browser,
+and creates `.env` if it does not already exist. The project is pinned to
+Python 3.12; `uv.lock` records the resolved package versions.
+
+`./run.sh` is the single command for starting the FastAPI application. Extra
+Uvicorn arguments can be passed through, for example `./run.sh --reload`.
 
 Open `http://127.0.0.1:8000`. The first version exposes health, test-case,
 and append-only event-log endpoints. The browser runner is intentionally
