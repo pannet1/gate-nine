@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gate Nine — Single Point of Reference</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; max-width: 900px; }
+        h1, h2, h3 { color: #333; }
+        h2 { border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 32px; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+        th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; vertical-align: top; }
+        th { background: #f2f2f2; }
+        code, pre { background: #f5f5f5; font-family: Consolas, monospace; }
+        pre { padding: 10px; overflow-x: auto; border: 1px solid #ddd; }
+        .note { background: #fffbe6; border: 1px solid #e6d98a; padding: 10px; }
+    </style>
+</head>
+<body>
+
+<h1>Gate Nine — Single point of reference</h1>
+<p><strong>Last updated:</strong> 2026-10-17</p>
+<p>This page is the one place the team follows for how this project is designed and
+how it grows. It records the control flow and the conventions around it — not what to
+test or how to test. Those live in the brief and in the generated
+<code>test.html</code>. Update this page in the same change that moves the design forward.</p>
+
+<h2>1. Aim</h2>
+<p>Final functional testing of <code>https://rachis.co.in</code> before delivery to the
+customer. Rachis is treated as an external black-box system — no source code, no
+internal APIs, no database access. Testing is human-in-the-loop: a human writes the
+brief, a human approves it, and a human owns the final PASS/FAIL.</p>
+
+<h2>2. People</h2>
+<table>
+    <tr><th>Name</th><th>Role</th></tr>
+    <tr><td>Murugan (Murugesan)</td><td>Chief architect, rachis.co.in — authors the brief</td></tr>
+    <tr><td>Jashveer</td><td>Lead developer</td></tr>
+    <tr><td>Karthick</td><td>Tester — runs the tests, decides PASS/FAIL</td></tr>
+</table>
+
+<h2>3. Folder layout</h2>
+<p>Vouchers are canonical and live in <code>app/vouchers/</code> — one folder per unique
+document, holding its <code>test-case.html</code>. A run never owns a voucher; it links
+to one.</p>
+<pre>app/vouchers/                 # canonical — one folder per unique document
+├── sales-invoice/
+│   └── test-case.html
+├── purchase-bill/
+│   └── test-case.html
+├── goods-receipt/
+│   └── test-case.html
+└── credit-note/
+    └── test-case.html</pre>
+<p>A human creates a uniquely numbered run folder — the <strong>run_id</strong>, zero-padded
+(<code>001</code>, <code>002</code>, …) — and drops in a Markdown brief plus symlinks to
+the vouchers under test. The runner never invents a run_id; it only ever reads the
+highest-numbered folder that already exists.</p>
+<pre>test-cases/
+└── 001/                    # run_id — created by a human
+    ├── &lt;any-name&gt;.md       # brief from Murugesan — name is free, only .md matters
+    ├── test.html           # the ordered test plan
+    ├── sales-invoice -&gt;  ../../../app/vouchers/sales-invoice
+    ├── purchase-bill -&gt;  ../../../app/vouchers/purchase-bill
+    ├── goods-receipt -&gt;  ../../../app/vouchers/goods-receipt
+    └── credit-note   -&gt;  ../../../app/vouchers/credit-note</pre>
+<p><strong>Revised in place, not versioned.</strong> A voucher is one live document. A later
+run linking it sees whatever it says now, and revising it for a later run rewrites what an
+earlier run pointed at — accepted, because history is carried by the run's evidence, not by
+the document. Dead versions are not wanted.</p>
+<p>The brief's filename is free — <code>notes.MD</code>, <code>header-fields.md</code>,
+whatever its author chose. Only the <code>.md</code> extension matters, because that is
+what the loop looks for. The artefacts below <code>test-case.html</code> are written as
+the run executes.</p>
+
+<h2>4. Main loop</h2>
+<p>The whole of it:</p>
+<ol>
+    <li>Find the latest <code>run_id</code> — the highest-numbered folder under
+        <code>test-cases/</code>.</li>
+    <li><strong>Discover the <code>.md</code> file from Murugesan inside it.</strong>
+        The name is irrelevant; only its presence counts.</li>
+    <li>Proceed with <code>test.html</code>.</li>
+    <li>If <code>test.html</code> is not present, <strong>create it.</strong></li>
+    <li>Run the cases it defines, in its order.</li>
+    <li><strong>Stop dead on the first failure.</strong> No further case is attempted;
+        the run ends there and the developers are notified.</li>
+    <li>Finish only when every case in the run has passed.</li>
+</ol>
+<p class="note">No <code>.md</code> file in the run folder means the loop does not
+proceed. It does not guess and does not fall back to any other source.</p>
+
+<h2>5. Lifecycle</h2>
+<p>Per case: <code>draft → ai-prepared → human-approved → running → passed | failed</code></p>
+<p>Per run: <code>brief-present → plan → running → failed</code> on the first failing case,
+or <code>passed</code> when every case in the folder has passed.</p>
+<p>A failed run is not resumed. The next attempt is a fresh <code>run_id</code>
+(<code>002</code>, <code>003</code>, …) with the corrected brief.</p>
+
+<h2>6. Logging</h2>
+<p>Every operation is logged as <code>operation &lt;name:value&gt; &lt;form name&gt;</code>:</p>
+<pre>input product:hamam voucher
+create screenshot voucher
+save screenshot voucher
+delete screenshot voucher
+click home delivery note</pre>
+<p>Logs are append-only JSONL and carry test ID, action, safe details, and timestamp.
+The team wants a live relay of the current operation so Murugan and Jashveer see
+real-time progress.</p>
+
+<h2>7. Infra</h2>
+<ul>
+    <li>Remote terminal-only compute for the developers to watch the live log.</li>
+    <li>A web server alongside the log, presenting the run's files in a rich HTML
+        interface — screenshot, brief, and test plan together.</li>
+    <li>Local harness: FastAPI service (<code>app/</code>) with <code>/health</code>,
+        <code>/api/events</code>, and a dashboard at <code>http://127.0.0.1:8000</code>.</li>
+    <li>Browser runner is kept separate so voucher-specific behaviour can be added
+        without mixing into the dashboard.</li>
+</ul>
+
+<h2>8. Safety</h2>
+<ul>
+    <li>Never commit <code>.env</code>, tenant credentials, customer data, or unredacted evidence.</li>
+    <li>The runner may open and inspect the tenant but must not create or post a voucher
+        unless a human approved that specific case and its test data.</li>
+    <li>A human owns the final PASS/FAIL — an AI model never marks a run as passed.</li>
+    <li>The loop writes <code>test.html</code>, <code>result.md</code>, and the evidence
+        files. The human writes the brief and the approval.</li>
+</ul>
+
+<h2>9. Open items</h2>
+<ul>
+    <li><strong>Implement the main loop (§4).</strong> <code>app/runner.py</code> currently
+        holds only a login-page helper. Brief discovery, <code>test.html</code> creation,
+        ordered execution, stop-on-first-failure, and result-writing do not exist yet.</li>
+</ul>
+
+<h2>10. Progress log</h2>
+<table>
+    <tr><th>Date</th><th>Change</th><th>By</th></tr>
+    <tr><td>2026-10-17</td><td>This reference page created; the test-case folder layout
+        confirmed.</td><td>Karthick</td></tr>
+    <tr><td>2026-10-17</td><td>Removed <code>test-cases/README.md</code>. Its
+        <code>YYYY-MM-DD-voucher-type-short-slug</code> scheme was superseded by the numbered-run
+        layout in use.</td><td>Karthick</td></tr>
+    <tr><td>2026-10-17</td><td>Reframed <code>001</code> as a <strong>run_id</strong> created by a
+        human. The loop processes the latest run and stops dead on the first failure; it finishes
+        only when every case has passed. A failed run is not resumed.</td><td>Karthick</td></tr>
+    <tr><td>2026-10-17</td><td>Reduced this page to control flow only. It no longer states what to
+        test or how — the test-case format skeleton and the run-001 coverage table were removed;
+        those live in the brief and the generated <code>test.html</code>. §4 Main loop restated:
+        discover Murugesan's <code>.md</code>, proceed with <code>test.html</code>, and create it
+        only when absent.</td><td>Karthick</td></tr>
+</table>
+
+</body>
+</html>

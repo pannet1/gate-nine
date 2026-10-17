@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test 1 - Header Fields - Sales Invoice</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2, h3 { color: #333; }
+        .precondition, .test-data { margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Test 1 — Header fields</h1>
+    <p><strong>Voucher type:</strong> Sales Invoice</p>
+    
+    <div class="precondition">
+        <strong>Preconditions:</strong><br>
+        - User is logged into the Rachis tenant<br>
+        - At least one Customer exists with known GST state<br>
+        - At least one Item exists in the Item master with Rate and GST% set
+    </div>
+    
+    <div class="test-data">
+        <strong>Test data:</strong><br>
+        - Customer: (to be selected from tenant)<br>
+        - Invoice date: current date<br>
+        - Due date: 30 days from invoice date<br>
+        - Payment terms: Net 30 (optional, can be left blank)
+    </div>
+    
+    <h2>Steps</h2>
+    <ol>
+        <li>Open a new Sales Invoice voucher</li>
+        <li>Verify Top block shows: Customer field, Invoice date, Due date, Place of supply, Payment terms</li>
+        <li>Verify Title area shows voucher type and voucher number</li>
+        <li>Click "▸ More details" — reveal Salesperson / PO fields</li>
+        <li>Select a Customer whose GST state is known</li>
+        <li>Verify Place of supply shows state name with 2-digit code (e.g. "Tamil Nadu (33)")</li>
+        <li>Verify Payment terms can be left blank and voucher still saves</li>
+    </ol>
+    
+    <h2>Expected result</h2>
+    <ul>
+        <li>All header fields present and functional</li>
+        <li>Customer selection populates Place of supply with state name and code</li>
+        <li>Payment terms optional — voucher saves even when blank</li>
+        <li>"More details" disclosure reveals secondary fields</li>
+    </ul>
+</body>
+</html>

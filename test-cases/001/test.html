@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Run 001 — Test plan</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; max-width: 900px; }
+        h1, h2, h3 { color: #333; }
+        h2 { border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 28px; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+        th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; vertical-align: top; }
+        th { background: #f2f2f2; }
+        code { background: #f5f5f5; font-family: Consolas, monospace; }
+        .note { background: #fffbe6; border: 1px solid #e6d98a; padding: 10px; }
+        .block { background: #f0f7f0; border: 1px solid #b6d6b6; padding: 10px; }
+        .missing { color: #a00; }
+        .covered { color: #1a7f37; }
+    </style>
+</head>
+<body>
+
+<h1>Run 001 — Test plan</h1>
+<p><strong>Source brief:</strong> Voucher Testing Manual — Accounting &amp; Inventory.md
+&nbsp;·&nbsp; <strong>Author of brief:</strong> @Iyyasamy Murugesan, Oct 16 2026</p>
+<p><strong>Scope:</strong> voucher entry screens (v4) on Rachis — Accounting &amp; Inventory.</p>
+
+<div class="note">
+<strong>Ordering is mandatory, not advisory.</strong> The brief states that later tests
+(discount, print) assume posted vouchers created by the earlier ones. Execute steps
+1→17 in sequence. A failure at any step stops the run — do not continue past it.
+</div>
+
+<h2>Execution order</h2>
+
+<h2>Phase A — Header fields (Test 1)</h2>
+<p>Establishes the vouchers later phases depend on.</p>
+<table>
+    <tr><th>#</th><th>Voucher</th><th>Check</th><th>Case folder</th></tr>
+    <tr><td>1</td><td>Sales Invoice</td><td>Header block, title/voucher number, "▸ More details",
+        Place of supply shows state name + 2-digit code, Payment terms optional</td>
+        <td class="covered">sales-invoice/</td></tr>
+    <tr><td>2</td><td>Purchase Bill</td><td>Same checks with Vendor in place of Customer</td>
+        <td class="covered">purchase-bill/</td></tr>
+    <tr><td>3</td><td>GRN</td><td>Same checks with Vendor in place of Customer</td>
+        <td class="covered">goods-receipt/</td></tr>
+</table>
+
+<h2>Phase B — Currency box (Test 2)</h2>
+<table>
+    <tr><th>#</th><th>Voucher</th><th>Check</th><th>Case folder</th></tr>
+    <tr><td>4</td><td>Sales Invoice</td><td>Base currency default; dropdown lists only enabled
+        currencies; non-base shows auto-filled Exchange rate; switching back hides it;
+        if multi-currency is off, plain read-only text with no dropdown</td>
+        <td class="missing">none yet</td></tr>
+    <tr><td>5</td><td>Purchase Bill</td><td>Same as above</td>
+        <td class="missing">none yet</td></tr>
+</table>
+
+<h2>Phase C — Line items (Test 3)</h2>
+<table>
+    <tr><th>#</th><th>Voucher</th><th>Check</th><th>Case folder</th></tr>
+    <tr><td>6</td><td>Sales Invoice</td><td>HSN/SAC under Item name; Rate auto-fills and is
+        overwritable; Qty → Amount auto-computed and locked; GST% read-only or configured
+        dropdown, never greyed-out; unconfigured rate (e.g. 88%) rejected; Tab/Enter opens a
+        new row; complete row highlights</td>
+        <td class="missing">none yet</td></tr>
+    <tr><td>7</td><td>Sales Invoice</td><td><strong>Line discount</strong> — percentage OR flat
+        ₹; Amount reduces correctly in both modes; save draft and reopen, discount persists
+        (real bug until 2026-10-14 — double-check)</td>
+        <td class="missing">none yet</td></tr>
+</table>
+<p class="note">Do not test a ₹-per-unit vs ₹-on-whole-line distinction. It does not exist
+in this version — see Exclusions.</p>
+
+<h2>Phase D — Header (invoice) discount (Test 4)</h2>
+<p>Requires 2–3 lines already entered on the voucher, so runs after Phase C.
+The brief flags this area as recently re-landed (PR #230) — test deliberately.</p>
+<table>
+    <tr><th>#</th><th>Voucher</th><th>Check</th><th>Case folder</th></tr>
+    <tr><td>8</td><td>Sales Invoice</td><td>Discount control with % / ₹ toggle near totals;
+        adjacent "eligible base" equals sum of line amounts <em>after</em> each line's own
+        discount; an in-range discount applies and totals update</td>
+        <td class="missing">none yet</td></tr>
+    <tr><td>9</td><td>Sales Invoice</td><td><strong>Three rejections</strong>, each with a clear
+        inline error blocking Save: negative discount; % over 100; ₹ greater than eligible base</td>
+        <td class="missing">none yet</td></tr>
+    <tr><td>10</td><td>Purchase Bill</td><td>Header discount present and usable even when the
+        tenant's invoice-discount setting is OFF (Purchase always records the supplier's bill)</td>
+        <td class="missing">none yet</td></tr>
+    <tr><td>11</td><td>Credit Note</td><td>Header discount folds in correctly when the parent
+        invoice had one</td>
+        <td class="covered">credit-note/</td></tr>
+    <tr><td>12</td><td>Debit Note</td><td>Same, against a parent bill</td>
+        <td class="missing">none yet</td></tr>
+</table>
+
+<h2>Phase E — GST / tax (Test 5)</h2>
+<table>
+    <tr><th>#</th><th>Voucher</th><th>Check</th><th>Case folder</th></tr>
+    <tr><td>13</td><td>Sales Invoice</td><td>Interstate (customer state ≠ company state) splits
+        as IGST</td><td class="missing">none yet</td></tr>
+    <tr><td>14</td><td>Sales Invoice</td><td>Intrastate splits equally as CGST + SGST</td>
+        <td class="missing">none yet</td></tr>
+    <tr><td>15</td><td>Credit Note</td><td>Against an invoice whose GST rate has since changed or
+        been removed — must show the <em>original</em> rate, not today's</td>
+        <td class="covered">credit-note/</td></tr>
+</table>
+<p class="note">GST% acceptance itself is already covered at step 6.</p>
+
+<h2>Phase F — Draft, Post, Correct (Test 6)</h2>
+<table>
+    <tr><th>#</th><th>Voucher</th><th>Check</th><th>Case folder</th></tr>
+    <tr><td>16</td><td>Sales Invoice</td><td>"Save draft" and "Post" both present; posting a
+        saved draft yields the <em>same</em> document (voucher number unchanged, no duplicate);
+        after Post the voucher stays on screen read-only and does not clear itself; posted
+        voucher shows Print / More / Correct; "Correct" requires a banner reason before saving;
+        New (Alt+N) resets to blank</td>
+        <td class="missing">none yet</td></tr>
+</table>
+<p class="note">GRN draft editing cannot change Vendor/PO once started. That is expected,
+not a bug.</p>
+
+<h2>Phase G — Print / PDF (Test 7)</h2>
+<p>Requires posted vouchers from Phase F.</p>
+<table>
+    <tr><th>#</th><th>Voucher</th><th>Check</th><th>Case folder</th></tr>
+    <tr><td>17a</td><td>Sales Invoice</td><td rowspan="3">Margins present; Payment Terms shows a
+        readable label not a raw id; amount columns right-aligned; discount column headed
+        "Disc (₹)"; date as dd-mm-yyyy; totals show Discount, GST and Round-off as separate
+        lines; UPI QR code reasonably sized</td>
+        <td class="missing">none yet</td></tr>
+    <tr><td>17b</td><td>Purchase Bill</td><td class="missing">none yet</td></tr>
+    <tr><td>17c</td><td>Credit Note</td><td class="covered">credit-note/</td></tr>
+</table>
+<p class="note">Do not chase paper size (A4/A5) or template variety (Classic/Modern/Minimal/
+Professional) unless the tenant's Settings exposes those choices.</p>
+
+<h2>Voucher coverage gap</h2>
+<p>The brief names <strong>9 voucher types</strong> but tests 1–7 only exercise five of them.
+The remaining four are listed as in-scope with no steps written:</p>
+<table>
+    <tr><th>Voucher</th><th>Cycle</th><th>Status in this run</th></tr>
+    <tr><td>Delivery Note (GDN)</td><td>Sales</td><td class="missing">In scope, no test steps in
+        the brief — needs clarification</td></tr>
+    <tr><td>Purchase Order</td><td>Purchase</td><td class="missing">In scope, no test steps in
+        the brief — needs clarification</td></tr>
+    <tr><td>Receipt Voucher</td><td>Payment</td><td class="missing">Only noted as having an
+        amount-first layout by design — no test steps</td></tr>
+    <tr><td>Vendor Payment</td><td>Payment</td><td class="missing">Only noted as having an
+        amount-first layout by design — no test steps</td></tr>
+</table>
+<p>Raised as an open question for Murugan: are these four deferred to a later run, or does
+this run need steps for them? No steps are invented here.</p>
+
+<h2>Existing case folders vs this plan</h2>
+<p>Four case folders exist from earlier preparation. Only <code>credit-note/</code> maps
+cleanly onto a step in the brief; the other three were prepared for header fields across
+four voucher types, but the brief's Test 1 covers three — <strong>Credit Note is not in
+Test 1</strong>. Steps 1–3 are the match.</p>
+<table>
+    <tr><th>Folder</th><th>Prepared for</th><th>Maps to</th></tr>
+    <tr><td>sales-invoice/</td><td>Header fields</td><td>Steps 1 (Test 1)</td></tr>
+    <tr><td>purchase-bill/</td><td>Header fields</td><td>Steps 2 (Test 1)</td></tr>
+    <tr><td>goods-receipt/</td><td>Header fields</td><td>Steps 3 (Test 1)</td></tr>
+    <tr><td>credit-note/</td><td>Header fields</td><td>No match — Credit Note is not in Test 1.
+        Nearest use is step 11 / 15</td></tr>
+</table>
+<p>Steps 4–17 have no case folder yet. 13 of 17 steps are uncovered by an existing folder.</p>
+
+<h2>Exclusions — do not test, do not report</h2>
+<p>Carried verbatim from the brief. Nothing below is a failure in this run.</p>
+<div class="block">
+<ul>
+    <li>₹-per-unit vs ₹-on-whole-line line-discount mode — not built</li>
+    <li>Any GST / e-invoice treatment of a discounted invoice — frozen pending consultant review</li>
+    <li>TCS and cess showing zero</li>
+    <li>Reverse Charge (RCM) purchases with no input-tax-credit leg</li>
+    <li>GST on advance receipts showing zero — required by law for goods</li>
+    <li>Sales Order, Proforma Invoice, Journal Voucher, Stock Transfer, Expense Voucher,
+        Delivery Challan, Work Order, Job Card — none exist in this version</li>
+    <li>GRN draft editing behaving differently from other vouchers (Vendor/PO locked)</li>
+    <li>Correcting a posted Receipt or Vendor Payment amount — only allocation may change</li>
+    <li>Changing quantities on a posted GDN — restricted by design; use reversal/reissue</li>
+    <li>Missing A4/A5 or print-template choice where Settings does not expose them</li>
+    <li>Place of supply showing a bare 2-digit code instead of a state name — known gap,
+        already backlogged</li>
+</ul>
+</div>
+
+<h2>Reporting a failure</h2>
+<p>Per the brief, each issue needs: voucher type and test number (e.g. "Test 4, Sales
+Invoice"), what was done step by step, what was expected, what actually happened with a
+screenshot, and the voucher number if one was created. Send to Murugan directly.</p>
+
+<div class="note">
+<strong>Generated by the loop from the brief above.</strong> Do not hand-edit. Correct the
+brief and regenerate.
+</div>
+
+</body>
+</html>
