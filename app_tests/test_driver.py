@@ -6,8 +6,10 @@ from pathlib import Path
 from app.driver import (
     HEADLESS,
     ROUTED_ACTIONS,
+    archive_event_log,
     parse_plan,
     plan_path,
+    prepare_event_log,
     route_for,
 )
 
@@ -52,6 +54,46 @@ class PlanParsingTests(unittest.TestCase):
             run_dir = Path(directory) / "001"
             run_dir.mkdir()
             self.assertEqual(plan_path(run_dir), run_dir / "test.html")
+
+    def test_event_log_is_created_at_root_and_archived_in_run(self) -> None:
+        from app.config import settings
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run_dir = root / "001"
+            run_dir.mkdir()
+            original = settings.event_log_path
+            settings.event_log_path = root / "events.jsonl"
+            try:
+                active = prepare_event_log(run_dir)
+                self.assertEqual(active, root / "events.jsonl")
+                self.assertTrue(active.is_file())
+                self.assertEqual(active.read_text(encoding="utf-8"), "")
+
+                active.write_text('{"action":"run_start"}\n', encoding="utf-8")
+                archived = archive_event_log(run_dir)
+
+                self.assertEqual(archived, run_dir / "events.jsonl")
+                self.assertFalse(active.exists())
+                self.assertEqual(archived.read_text(encoding="utf-8"), '{"action":"run_start"}\n')
+            finally:
+                settings.event_log_path = original
+
+    def test_event_log_archive_cannot_overwrite_existing_run_log(self) -> None:
+        from app.config import settings
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run_dir = root / "001"
+            run_dir.mkdir()
+            (run_dir / "events.jsonl").write_text("old\n", encoding="utf-8")
+            original = settings.event_log_path
+            settings.event_log_path = root / "events.jsonl"
+            try:
+                with self.assertRaises(FileExistsError):
+                    prepare_event_log(run_dir)
+            finally:
+                settings.event_log_path = original
 
     def test_steps_keep_stable_ids_and_order(self) -> None:
         steps = [{"id": str(n), "action": "open-new", "voucher": "Sales Invoice"} for n in (1, 2, 17)]

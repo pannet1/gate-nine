@@ -92,6 +92,34 @@ def plan_path(run_dir: Path) -> Path:
     return run_dir / "test.html"
 
 
+def prepare_event_log(run_dir: Path) -> Path:
+    """Create an empty root log for a new run.
+
+    A completed run owns its archived log. Refuse to start again when that
+    archive already exists so a later AI diagnosis cannot overwrite evidence.
+    """
+    archive = run_dir / "events.jsonl"
+    if archive.exists():
+        raise FileExistsError(f"run already has an archived event log: {archive}")
+    root = settings.event_log_path
+    root.parent.mkdir(parents=True, exist_ok=True)
+    root.write_text("", encoding="utf-8")
+    return root
+
+
+def archive_event_log(run_dir: Path) -> Path:
+    """Move the active root log into the completed run folder."""
+    root = settings.event_log_path
+    archive = run_dir / "events.jsonl"
+    if not root.exists():
+        raise FileNotFoundError(f"active event log does not exist: {root}")
+    if archive.exists():
+        raise FileExistsError(f"refusing to overwrite archived event log: {archive}")
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    root.replace(archive)
+    return archive
+
+
 def announce(step: dict[str, Any], index: int, total: int) -> None:
     """Name the step and point at its case folder — never restate the method.
 
@@ -105,9 +133,8 @@ def announce(step: dict[str, Any], index: int, total: int) -> None:
 
 async def drive(run_dir: Path) -> dict[str, Any]:
     """Run the whole plan in a visible browser, unattended."""
-    from playwright.async_api import async_playwright
-
     plan = parse_plan(plan_path(run_dir))
+    prepare_event_log(run_dir)
     steps: list[dict[str, Any]] = plan.get("steps", [])
     run_id = plan.get("run_id", run_dir.name)
     summary: dict[str, Any] = {
@@ -117,50 +144,48 @@ async def drive(run_dir: Path) -> dict[str, Any]:
         "failed": None,
     }
 
-    if not steps:
-        summary["failed"] = {"step": None, "detail": "empty-plan"}
+    try:
+        _log(run_id, "run_start", {"run_dir": str(run_dir), "steps": len(steps)})
+        if not steps:
+            summary["failed"] = {"step": None, "detail": "empty-plan"}
+        else:
+            from playwright.async_api import async_playwright
+
+            async with async_playwright() as playwright:
+                browser = await playwright.chromium.launch(headless=HEADLESS)
+                page = await browser.new_page()
+                # No bootstrap sign-in here. The plan's sign-in step owns it.
+
+                for index, step in enumerate(steps):
+                    announce(step, index + 1, len(steps))
+                    outcome = await _perform(page, run_id, step)
+                    summary["counts"][outcome.status] += 1
+                    print(f"    → {outcome.status}" + (f" — {outcome.detail}" if outcome.detail else ""))
+                    _log(
+                        run_id,
+                        f"step_{outcome.status.replace('-', '_')}",
+                        {"id": step["id"], "action": step.get("action"), "detail": outcome.detail},
+                    )
+                    if outcome.status == "failed":
+                        summary["failed"] = {"step": step["id"], "detail": outcome.detail}
+                        break
+                    if index + 1 < len(steps):
+                        await asyncio.sleep(settings.step_delay)
+
+                await browser.close()
+        _log(run_id, "run_result", {**summary["counts"], "failed": summary["failed"]})
+        counts = summary["counts"]
+        print(
+            f"  {counts['ok']} ok · {counts['no-handler']} no handler · {counts['failed']} failed"
+            + (f" — stopped at step {summary['failed']['step']}" if summary["failed"] else "")
+        )
         return summary
-
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=HEADLESS)
-        page = await browser.new_page()
-        # No bootstrap sign-in here. The plan's sign-in step owns it, so a run
-        # logs one POST rather than one here and another at step 0.
-
-        for index, step in enumerate(steps):
-            announce(step, index + 1, len(steps))
-            outcome = await _perform(page, run_id, step)
-            summary["counts"][outcome.status] += 1
-            print(f"    → {outcome.status}" + (f" — {outcome.detail}" if outcome.detail else ""))
-            _log(
-                run_id,
-                f"step_{outcome.status.replace('-', '_')}",
-                {"id": step["id"], "action": step.get("action"), "detail": outcome.detail},
-            )
-            if outcome.status == "ok":
-                pass
-            elif outcome.status == "no-handler":
-                # A gap in the harness, not a failure of the product. Keep going
-                # so one unwritten action does not hide the rest of the run.
-                pass
-            else:
-                summary["failed"] = {"step": step["id"], "detail": outcome.detail}
-                break
-
-            # Hold on the result so a human watching the window can see what was
-            # entered before the next action moves on.
-            if index + 1 < len(steps):
-                await asyncio.sleep(settings.step_delay)
-
-        await browser.close()
-
-    _log(run_id, "run_result", summary["counts"])
-    counts = summary["counts"]
-    print(
-        f"  {counts['ok']} ok · {counts['no-handler']} no handler · {counts['failed']} failed"
-        + (f" — stopped at step {summary['failed']['step']}" if summary["failed"] else "")
-    )
-    return summary
+    except Exception as exc:  # noqa: BLE001 - archive before surfacing run failure
+        summary["failed"] = {"step": None, "detail": f"{type(exc).__name__}: {exc}"}
+        _log(run_id, "run_failed", summary["failed"])
+        raise
+    finally:
+        archive_event_log(run_dir)
 
 
 async def _sign_in(page: Any, run_id: str) -> Outcome:

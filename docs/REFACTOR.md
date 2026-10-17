@@ -117,7 +117,7 @@ be available as `passed` when required actions were skipped.
 Relevant code: [`app/driver.py`](../app/driver.py), especially `_perform()` and
 the run summary.
 
-### 3. Implement the run-log lifecycle
+### 3. Implement the run-log lifecycle — complete
 
 The target workflow requires a temporary root JSONL log for the active run.
 The main loop must:
@@ -129,8 +129,9 @@ The main loop must:
 5. archive it into `test-cases/<run_id>/events.jsonl` after success, failure,
    interruption, or crash cleanup where possible.
 
-The current implementation still uses `data/events.jsonl`, so this is a
-concrete migration item rather than merely a documentation concern.
+The implementation now uses the root `events.jsonl` and archives it into the
+completed run folder. The remaining runtime-hardening concerns are tracked
+below.
 
 ### 4. Bring the dashboard up to the documented boundary
 
@@ -266,16 +267,15 @@ The project needs a repeatable verification baseline including:
 Work through the backlog in this order:
 
 1. Decide and enforce the unsupported-action policy.
-2. Implement the root JSONL create/archive lifecycle.
-3. Implement missing-voucher browser training.
-4. Define the structured case action contract.
-5. Implement evidence capture and redaction.
-6. Add post-run AI diagnosis and developer bug triage.
-7. Reconcile documentation and repository shape.
-8. Add the dashboard and event stream.
-9. Add remote access controls.
-10. Harden logging and concurrency.
-11. Expand handler coverage and verification.
+2. Implement missing-voucher browser training.
+3. Define the structured case action contract.
+4. Implement evidence capture and redaction.
+5. Add post-run AI diagnosis and developer bug triage.
+6. Reconcile documentation and repository shape.
+7. Add the dashboard and event stream.
+8. Add remote access controls.
+9. Harden logging and concurrency.
+10. Expand handler coverage and verification.
 
 Each item should be reviewed and completed independently before moving to the
 next one.
