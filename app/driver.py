@@ -80,10 +80,13 @@ def parse_plan(test_html: Path) -> dict[str, Any]:
     if not test_html.is_file():
         raise FileNotFoundError(f"no plan at {test_html}")
     text = test_html.read_text(encoding="utf-8")
-    start = text.find("<script", text.find(PLAN_MARKER) - 60 if PLAN_MARKER in text else 0)
-    if PLAN_MARKER not in text:
+    marker = text.find(PLAN_MARKER)
+    if marker < 0:
         raise ValueError(f"{test_html} has no plan block")
-    start = text.index(">", text.index("<script", start)) + 1
+    script = text.rfind("<script", 0, marker + 1)
+    if script < 0:
+        raise ValueError(f"{test_html} has no script plan block")
+    start = text.index(">", script) + 1
     end = text.index("</script>", start)
     return json.loads(text[start:end])
 

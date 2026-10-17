@@ -42,6 +42,18 @@ class PlanParsingTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 parse_plan(write_plan(directory, with_block=False))
 
+    def test_plan_script_can_start_at_beginning_of_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "test.html"
+            path.write_text(
+                '<script type="application/json" id="plan">'
+                + json.dumps({"run_id": "001", "steps": []})
+                + "</script>",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(parse_plan(path)["steps"], [])
+
     def test_ignores_prose_tables_around_the_block(self) -> None:
         """The human tables must not be mistaken for the plan."""
         with tempfile.TemporaryDirectory() as directory:
