@@ -23,8 +23,6 @@ import re
 from pathlib import Path
 from typing import Any, NamedTuple
 
-from playwright.async_api import async_playwright
-
 from .config import settings
 from .events import append_event
 
@@ -107,6 +105,8 @@ def announce(step: dict[str, Any], index: int, total: int) -> None:
 
 async def drive(run_dir: Path) -> dict[str, Any]:
     """Run the whole plan in a visible browser, unattended."""
+    from playwright.async_api import async_playwright
+
     plan = parse_plan(plan_path(run_dir))
     steps: list[dict[str, Any]] = plan.get("steps", [])
     run_id = plan.get("run_id", run_dir.name)

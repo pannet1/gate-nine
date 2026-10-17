@@ -172,8 +172,8 @@ relay of the current operation so Murugan and Jashveer see real-time progress.</
         interface — screenshot, brief, and test plan together.</li>
     <li>Local harness: FastAPI service (<code>app/</code>) with <code>/health</code>,
         <code>/api/events</code>, and a dashboard at <code>http://127.0.0.1:8000</code>.</li>
-    <li>Browser runner is kept separate so voucher-specific behaviour can be added
-        without mixing into the dashboard.</li>
+    <li><code>app.driver</code> is the sole browser runner and remains separate from
+        the FastAPI dashboard so voucher-specific behaviour does not mix into the API.</li>
     <li>Runtime data is gitignored: <code>.env</code>, <code>data/</code>, and
         every run-local screenshot. Evidence may quote tenant data, so it is never
         committed.</li>
@@ -185,8 +185,8 @@ relay of the current operation so Murugan and Jashveer see real-time progress.</
     <li>The runner may open and inspect the tenant but must not create or post a voucher
         unless a human approved that specific case and its test data.</li>
     <li>A human owns the final PASS/FAIL — an AI model never marks a run as passed.</li>
-    <li>The loop writes <code>test.html</code>, the run's result file, and the evidence
-        files. The human writes the brief and the approval.</li>
+    <li>The AI writes <code>test.html</code>; the main loop writes the run log and evidence
+        files. The human writes the brief and controls the approval/training decisions.</li>
 </ul>
 
 <h2>10. Open items</h2>

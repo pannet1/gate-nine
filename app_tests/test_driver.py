@@ -126,7 +126,7 @@ class PlanParsingTests(unittest.TestCase):
         self.assertIsNone(route_for("Vendor Payment"))
 
     def test_real_run_plan_is_well_formed(self) -> None:
-        """Run 001 ships with the loop — assert it stays parseable."""
+        """Run 001 ships with the driver — assert it stays parseable."""
         real = Path("test-cases/001/test.html")
         if not real.is_file():
             self.skipTest("run 001 not present")

@@ -21,13 +21,11 @@ The current components are:
   links to canonical cases.
 - `app/vouchers/` — canonical case instructions, currently stored as
   `test-case.html` files.
-- `app/driver.py` — the intended Playwright plan executor.
+- `app/driver.py` — the sole Playwright plan executor.
 - `app/events.py` — append-only JSONL event logging.
 - `app/main.py` — minimal FastAPI health and event API plus a placeholder
   dashboard.
 - `app/watch.py` — terminal event-log follower.
-- `app/loop.py` — an older/manual browser-opening path.
-- `app/runner.py` — a separate login and screenshot helper.
 
 ## Intended workflow
 
@@ -91,19 +89,11 @@ must not silently classify a harness limitation as a product failure.
 
 ## Refactor backlog
 
-### 1. Choose one canonical runner
+### 1. Canonical runner — complete
 
-There are currently three partially overlapping execution paths:
-
-- `app.driver` executes plans.
-- `app.loop` opens a browser and waits for manual closure.
-- `app.runner` provides a separate login/screenshot helper.
-
-This makes the operational entry point unclear and allows documentation and
-implementation to drift apart.
-
-Decision needed: make `app.driver` the sole runner, then retire or clearly
-isolate `loop.py` and `runner.py`.
+`app.driver` is the sole browser-plan executor. The competing `app.loop` and
+`app.runner` modules were removed. FastAPI remains a separate service, and
+`app.watch` remains a terminal log viewer rather than another runner.
 
 ### 2. Decide how unsupported actions affect the run
 
@@ -215,8 +205,8 @@ autonomous test execution.
 
 The design requires screenshots after meaningful state changes, redaction before
 sharing, and one current reference screenshot per test. The main driver does
-not currently implement that workflow. Screenshot behavior exists only in the
-separate `runner.py` helper.
+not currently implement that workflow; it remains a later run-local evidence
+item.
 
 Evidence should be associated with a run, step, and case, with an explicit
 replacement policy and a redaction boundary.
@@ -309,19 +299,18 @@ The project needs a repeatable verification baseline including:
 
 Work through the backlog in this order:
 
-1. Choose one canonical runner.
-2. Define the human-controlled run state and verdict model.
-3. Decide and enforce the unsupported-action policy.
-4. Implement the root JSONL create/archive lifecycle.
-5. Implement missing-voucher browser training.
-6. Define the structured case action contract.
-7. Implement evidence capture and redaction.
-8. Add post-run AI diagnosis and developer bug triage.
-9. Reconcile documentation and repository shape.
-10. Add the dashboard and event stream.
-11. Add remote access controls.
-12. Harden logging and concurrency.
-13. Expand handler coverage and verification.
+1. Define the human-controlled run state and verdict model.
+2. Decide and enforce the unsupported-action policy.
+3. Implement the root JSONL create/archive lifecycle.
+4. Implement missing-voucher browser training.
+5. Define the structured case action contract.
+6. Implement evidence capture and redaction.
+7. Add post-run AI diagnosis and developer bug triage.
+8. Reconcile documentation and repository shape.
+9. Add the dashboard and event stream.
+10. Add remote access controls.
+11. Harden logging and concurrency.
+12. Expand handler coverage and verification.
 
 Each item should be reviewed and completed independently before moving to the
 next one.

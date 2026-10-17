@@ -75,10 +75,9 @@ To follow events in a second terminal:
 uv run python -m app.watch
 ```
 
-`app.loop` is an older/manual browser-opening path, and `app.runner` is a
-small login/screenshot helper. The canonical plan executor is currently
-`app.driver`; consolidating the remaining paths is tracked in the refactor
-backlog.
+`app.driver` is the sole browser-plan executor. The FastAPI service remains a
+separate process so it can expose the event log while the visible browser run
+is active.
 
 ## Repository layout
 
@@ -103,8 +102,8 @@ After installation, run the test suite with:
 uv run python -m unittest discover -s app_tests -v
 ```
 
-The tests cover plan parsing, run discovery, route mapping, event logging, and
-execution-loop gates. Live tenant behavior requires credentials and a visible
+The tests cover plan parsing, run discovery, route mapping, and event logging.
+Live tenant behavior requires credentials and a visible
 browser, so it is not part of the local unit-test suite.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) before adding modules or
