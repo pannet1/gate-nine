@@ -139,12 +139,13 @@ async def drive(run_dir: Path) -> dict[str, Any]:
                 _log(run_id, "step_ok", {"id": step["id"], "action": step.get("action")})
             index += 1
 
-        # Leave the window open for inspection; close only on quit.
-        if summary["stopped"] != "quit":
-            print(f"\n  plan finished at {len(summary['completed'])}/{len(steps)} steps — browser left open.")
+        # The window closes itself, unless the human asked to take it over.
+        if summary["stopped"] == "paused":
+            print("\n  browser is yours — close the window when you are done.")
             await page.wait_for_event("close")
         else:
             await browser.close()
+            print(f"\n  done at {len(summary['completed'])}/{len(steps)} steps — browser closed.")
 
     return summary
 

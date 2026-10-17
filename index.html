@@ -98,7 +98,10 @@ the run executes.</p>
         <strong>r</strong> restart the flow from step 1 · <strong>q</strong> quit.</li>
     <li>An action with no handler stops and hands the window over. That is an intervention
         point, not a failure — the human fixes it, then chooses again.</li>
-    <li>On finishing, the browser is <strong>left open</strong> for inspection.</li>
+    <li><strong>Pause is the one exception that keeps the window.</strong> Finishing
+        the plan, or quitting, closes the browser and returns the terminal. Pressing
+        <strong>p</strong> leaves it open so you can drive it by hand — that is the
+        whole point of pausing.</li>
 </ol>
 <p class="note">No <code>.md</code> file in the run folder means the loop does not
 proceed. It does not guess and does not fall back to any other source.</p>
@@ -197,6 +200,17 @@ real-time progress.</p>
         route; <code>GRN</code> maps to the route the tenant headings as
         <em>Goods Receipt</em>. Login is driven from <code>.env</code>. Recorded dead
         links: <code>/ar</code> and <code>/accounting/invoices/</code> both 404.</td><td>Karthick</td></tr>
+    <tr><td>2026-10-17</td><td><strong>Sign-in automated; .env parse warnings fixed; browser
+        now closes itself.</strong> <code>_fill_login</code> filled the login boxes and
+        never submitted, so every run stalled at step 1 and looked like it needed a human
+        to type credentials <code>.env</code> already holds — replaced by
+        <code>_sign_in</code>, which submits and waits for the URL to leave
+        <code>/login</code>. <code>.env</code> converted to standard
+        <code>KEY=value</code>, retiring the manual parser in <code>config.py</code> that
+        existed only to tolerate the legacy form. On the end-of-run browser: the plan
+        finishing or quitting now closes it and returns the terminal; <strong>pause</strong>
+        remains the one case that keeps the window, since driving it by hand is the point
+        of pausing.</td><td>Karthick</td></tr>
 </table>
 
 </body>
