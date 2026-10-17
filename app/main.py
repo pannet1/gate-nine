@@ -10,7 +10,6 @@ from .events import append_event, read_events
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
     settings.event_log_path.parent.mkdir(parents=True, exist_ok=True)
     yield
 

@@ -5,8 +5,8 @@ step runs, the window holds for a fixed pause so human eyes can follow what was
 entered, and the next step fires. The browser is never headless — seeing fields
 get entered is the point of the project (index.html §1).
 
-Each step's outcome is appended to a text result under artifacts/, so a run
-leaves a readable record of what it did and where it stopped.
+Each step's outcome is appended to the JSONL event log, so a run leaves a
+machine-readable record of what it did and where it stopped.
 
 How a step is classified:
     ok          the action ran.
@@ -20,7 +20,6 @@ How a step is classified:
 import asyncio
 import json
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -95,14 +94,6 @@ def plan_path(run_dir: Path) -> Path:
     return run_dir / "test.html"
 
 
-def result_path(run_id: str) -> Path:
-    """Where a run's text result is written.
-
-    Under artifacts/, which is gitignored — a result quotes tenant data.
-    """
-    return settings.artifacts_dir / f"{run_id}-result.txt"
-
-
 def announce(step: dict[str, Any], index: int, total: int) -> None:
     """Name the step and point at its case folder — never restate the method.
 
@@ -114,94 +105,22 @@ def announce(step: dict[str, Any], index: int, total: int) -> None:
     print(f"    method:  app/vouchers/{case}/test-case.html")
 
 
-def render_result(
-    plan_file: Path,
-    steps: list[dict[str, Any]],
-    seen: list[tuple[dict[str, Any], Outcome]],
-    summary: dict[str, Any],
-) -> str:
-    """The whole text result, as one document.
-
-    Rewritten in full after every step rather than appended to, so a run that
-    dies mid-flight still leaves a coherent record ending at the last step it
-    reached.
-    """
-    outcomes = {step["id"]: outcome for step, outcome in seen}
-    total = len(steps)
-
-    lines = [
-        f"run {summary['run_id']}",
-        f"plan  {plan_file}",
-        f"steps {total}",
-        f"started {summary['started']}",
-        "",
-        f"{'pos':<7}{'step':<9}{'action':<24}{'case':<18}result",
-        "-" * 78,
-    ]
-    for position, step in enumerate(steps, start=1):
-        outcome = outcomes.get(step["id"])
-        if outcome is None:
-            mark = "not reached"
-        elif outcome.detail:
-            mark = f"{outcome.status} — {outcome.detail}"
-        else:
-            mark = outcome.status
-        lines.append(
-            f"{position}/{total:<6}"
-            f"step {step['id']:<5}"
-            f"{step.get('action', ''):<24}"
-            f"{step.get('case', ''):<18}"
-            f"{mark}"
-        )
-
-    counts = summary["counts"]
-    lines.append("-" * 78)
-    if summary["failed"]:
-        lines.append(
-            f"stopped at step {summary['failed']['step']} — {summary['failed']['detail']}"
-        )
-    elif total:
-        lines.append("finished every step")
-    else:
-        lines.append("no steps in the plan")
-    lines.append(
-        f"{counts['ok']} ok · {counts['no-handler']} no handler · {counts['failed']} failed"
-    )
-    return "\n".join(lines) + "\n"
-
-
-def write_result(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
-
 async def drive(run_dir: Path) -> dict[str, Any]:
     """Run the whole plan in a visible browser, unattended."""
     plan = parse_plan(plan_path(run_dir))
     steps: list[dict[str, Any]] = plan.get("steps", [])
     run_id = plan.get("run_id", run_dir.name)
-    outcome_file = result_path(run_id)
-
     summary: dict[str, Any] = {
         "run_id": run_id,
         "total": len(steps),
-        "started": datetime.now().isoformat(timespec="seconds"),
         "counts": {"ok": 0, "no-handler": 0, "failed": 0},
         "failed": None,
-        "result_file": str(outcome_file),
     }
-    seen: list[tuple[dict[str, Any], Outcome]] = []
-
-    # Written before the browser opens, so even a launch that never comes back
-    # leaves a result saying the run started.
-    write_result(outcome_file, render_result(plan_path(run_dir), steps, seen, summary))
 
     if not steps:
         summary["failed"] = {"step": None, "detail": "empty-plan"}
-        write_result(outcome_file, render_result(plan_path(run_dir), steps, seen, summary))
         return summary
 
-    settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=HEADLESS)
         page = await browser.new_page()
@@ -211,7 +130,6 @@ async def drive(run_dir: Path) -> dict[str, Any]:
         for index, step in enumerate(steps):
             announce(step, index + 1, len(steps))
             outcome = await _perform(page, run_id, step)
-            seen.append((step, outcome))
             summary["counts"][outcome.status] += 1
             print(f"    → {outcome.status}" + (f" — {outcome.detail}" if outcome.detail else ""))
             _log(
@@ -219,10 +137,6 @@ async def drive(run_dir: Path) -> dict[str, Any]:
                 f"step_{outcome.status.replace('-', '_')}",
                 {"id": step["id"], "action": step.get("action"), "detail": outcome.detail},
             )
-            # Refresh after every step: a crash mid-run still leaves a result
-            # that ends where the run did.
-            write_result(outcome_file, render_result(plan_path(run_dir), steps, seen, summary))
-
             if outcome.status == "ok":
                 pass
             elif outcome.status == "no-handler":
@@ -240,10 +154,8 @@ async def drive(run_dir: Path) -> dict[str, Any]:
 
         await browser.close()
 
-    write_result(outcome_file, render_result(plan_path(run_dir), steps, seen, summary))
-    _log(run_id, "run_result", {"result_file": str(outcome_file), **summary["counts"]})
+    _log(run_id, "run_result", summary["counts"])
     counts = summary["counts"]
-    print(f"\n  result written to {outcome_file}")
     print(
         f"  {counts['ok']} ok · {counts['no-handler']} no handler · {counts['failed']} failed"
         + (f" — stopped at step {summary['failed']['step']}" if summary["failed"] else "")

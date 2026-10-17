@@ -18,12 +18,11 @@ env/
 data/
 logs/
 
-# Test artifacts that may contain tenant or customer data
+# Run-local evidence that may contain tenant or customer data
 *.png
 *.jpg
 *.jpeg
 *.pdf
-artifacts/
 screenshots/
 
 # Editor and operating-system files

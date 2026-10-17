@@ -48,7 +48,6 @@ async def run_visible(run_dir: Path) -> None:
     needs voucher handlers, which do not exist yet — the window is held open
     so a human can inspect the starting state.
     """
-    settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=HEADLESS)
         page = await browser.new_page()

@@ -6,14 +6,18 @@ from .config import Settings
 from .events import append_event
 
 
-async def open_login_page(settings: Settings, *, test_id: str = "manual-login") -> Path:
+async def open_login_page(
+    settings: Settings,
+    run_dir: Path,
+    *,
+    test_id: str = "manual-login",
+) -> Path:
     """Open Rachis and fill login fields, stopping before any business action.
 
     The exact login selectors must be confirmed against the tenant UI before
     this function is used in a voucher test. It deliberately does not submit
     a voucher or mark a test result.
     """
-    settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch(headless=settings.headless)
         page = await browser.new_page()
@@ -27,7 +31,8 @@ async def open_login_page(settings: Settings, *, test_id: str = "manual-login") 
         if settings.rachis_password and await page.locator("input[type=password], input[name=password]").count():
             await page.locator("input[type=password], input[name=password]").first.fill(settings.rachis_password)
 
-        screenshot = settings.artifacts_dir / f"{test_id}-login-form.png"
+        screenshot = run_dir / "login" / "screenshot.png"
+        screenshot.parent.mkdir(parents=True, exist_ok=True)
         await page.screenshot(path=str(screenshot), full_page=True)
         append_event(settings.event_log_path, test_id=test_id, action="capture_screenshot", details={"path": str(screenshot)})
         await browser.close()

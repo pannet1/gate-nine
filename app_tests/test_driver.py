@@ -6,11 +6,8 @@ from pathlib import Path
 from app.driver import (
     HEADLESS,
     ROUTED_ACTIONS,
-    Outcome,
     parse_plan,
     plan_path,
-    render_result,
-    result_path,
     route_for,
 )
 
@@ -55,10 +52,6 @@ class PlanParsingTests(unittest.TestCase):
             run_dir = Path(directory) / "001"
             run_dir.mkdir()
             self.assertEqual(plan_path(run_dir), run_dir / "test.html")
-
-    def test_result_lands_in_the_gitignored_artifacts_dir(self) -> None:
-        """A result quotes tenant data, so it must not be committable."""
-        self.assertEqual(result_path("001"), Path("artifacts/001-result.txt"))
 
     def test_steps_keep_stable_ids_and_order(self) -> None:
         steps = [{"id": str(n), "action": "open-new", "voucher": "Sales Invoice"} for n in (1, 2, 17)]
@@ -144,65 +137,6 @@ class PlanParsingTests(unittest.TestCase):
         for step in plan["steps"]:
             for field in ("id", "action", "case"):
                 self.assertIn(field, step, f"step missing {field}: {step}")
-
-
-class ResultRenderingTests(unittest.TestCase):
-    """A run leaves a text record of what it did and where it stopped."""
-
-    STEPS = [
-        {"id": "0", "action": "sign-in", "case": "login"},
-        {"id": "1", "action": "open-new", "case": "sales-invoice"},
-        {"id": "2", "action": "add-line", "case": "sales-invoice"},
-    ]
-
-    @staticmethod
-    def summary(**overrides) -> dict:
-        base = {
-            "run_id": "001",
-            "total": 3,
-            "started": "2026-10-17T00:00:00",
-            "counts": {"ok": 0, "no-handler": 0, "failed": 0},
-            "failed": None,
-            "result_file": "artifacts/001-result.txt",
-        }
-        base.update(overrides)
-        return base
-
-    def render(self, seen: list, **overrides) -> str:
-        return render_result(Path("test-cases/001/test.html"), self.STEPS, seen, self.summary(**overrides))
-
-    def test_steps_not_run_are_named_not_omitted(self) -> None:
-        text = self.render([(self.STEPS[0], Outcome("ok"))], counts={"ok": 1, "no-handler": 0, "failed": 0})
-
-        self.assertIn("not reached", text)
-        self.assertIn("step 2", text)
-
-    def test_a_failure_stops_the_run_and_is_named(self) -> None:
-        seen = [(self.STEPS[0], Outcome("ok")), (self.STEPS[1], Outcome("failed", "no heading"))]
-        text = self.render(
-            seen,
-            counts={"ok": 1, "no-handler": 0, "failed": 1},
-            failed={"step": "1", "detail": "no heading"},
-        )
-
-        self.assertIn("stopped at step 1 — no heading", text)
-        self.assertIn("not reached", text)
-
-    def test_no_handler_is_a_gap_not_a_failure(self) -> None:
-        seen = [
-            (self.STEPS[0], Outcome("ok")),
-            (self.STEPS[1], Outcome("ok")),
-            (self.STEPS[2], Outcome("no-handler", "no handler for action 'add-line'")),
-        ]
-        text = self.render(seen, counts={"ok": 2, "no-handler": 1, "failed": 0})
-
-        self.assertIn("finished every step", text)
-        self.assertIn("2 ok · 1 no handler · 0 failed", text)
-
-    def test_empty_plan_says_so(self) -> None:
-        text = render_result(Path("test.html"), [], [], self.summary(total=0))
-
-        self.assertIn("no steps in the plan", text)
 
 
 class UnattendedRunTests(unittest.TestCase):

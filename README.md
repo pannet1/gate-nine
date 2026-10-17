@@ -36,7 +36,8 @@ them into the dashboard.
 - `test-cases/` — one folder per human-approved test case
 - `docs/` — architecture and contribution boundaries
 - `data/` — local runtime state; ignored by Git
-- `artifacts/` — screenshots/PDFs; ignored by Git
+- Run-local evidence — each case keeps its current `screenshot.png`; image and
+  PDF evidence remains untracked.
 
 See `docs/ARCHITECTURE.md` before adding new modules.
 

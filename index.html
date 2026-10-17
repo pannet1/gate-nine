@@ -119,9 +119,8 @@ prompts, and nothing waits for a keystroke.</p>
         That is a gap in the harness, not a failure of the product.</li>
     <li>A step that genuinely fails stops the run there, per §5. The browser closes and
         the terminal returns.</li>
-    <li>Every step's outcome is written to <code>artifacts/&lt;run_id&gt;-result.txt</code>,
-        rewritten in full after each step so a run that dies mid-flight still leaves a
-        record ending where it did. A summary is printed when the run ends.</li>
+    <li>Every step's outcome is written to the append-only JSONL event log. A summary is
+        printed when the run ends.</li>
     <li><code>uv run python -m app.watch</code> tails <code>data/events.jsonl</code> to a
         second terminal, so the run can be followed without looking at the browser.</li>
 </ol>
@@ -157,9 +156,9 @@ relay of the current operation so Murugan and Jashveer see real-time progress.</
         <code>/api/events</code>, and a dashboard at <code>http://127.0.0.1:8000</code>.</li>
     <li>Browser runner is kept separate so voucher-specific behaviour can be added
         without mixing into the dashboard.</li>
-    <li>Runtime data is gitignored: <code>.env</code>, <code>data/</code>,
-        <code>artifacts/</code>, and every screenshot. A result quotes tenant data, so
-        it is never committed.</li>
+    <li>Runtime data is gitignored: <code>.env</code>, <code>data/</code>, and
+        every run-local screenshot. Evidence may quote tenant data, so it is never
+        committed.</li>
 </ul>
 
 <h2>8. Safety</h2>

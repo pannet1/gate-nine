@@ -8,7 +8,6 @@ class Settings(BaseSettings):
     rachis_username: str = ""
     rachis_password: str = ""
     headless: bool = False
-    artifacts_dir: Path = Path("artifacts")
     event_log_path: Path = Path("data/events.jsonl")
     # Seconds the visible browser holds after each step, so eyes can keep up
     # with what was just entered. The run is unattended; this is its only pause.
