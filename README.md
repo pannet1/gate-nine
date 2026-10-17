@@ -1,51 +1,110 @@
-# Rachis black-box testing harness
+# Gate Nine
 
-This project supports human-supervised functional testing of the remote
-`rachis.co.in` application. It does not require access to Rachis source code,
-internal APIs, or its database.
+Gate Nine is a human-supervised black-box testing harness for the remote
+`rachis.co.in` application. It uses Playwright against the visible web UI and
+does not require access to Rachis source code, internal APIs, or its database.
+
+The current workflow and design decisions are maintained in the repository
+root [`index.html`](index.html). The refactor backlog is in
+[`docs/REFACTOR.md`](docs/REFACTOR.md).
 
 ## Safety rules
 
-- Never commit `.env`, tenant credentials, customer data, or unredacted evidence.
-- The runner may open and inspect the tenant, but must not create or post a
-  voucher unless a human has approved the specific test case and test data.
+- Never commit `.env`, tenant credentials, customer data, or unredacted
+  evidence.
+- Do not create or post a voucher unless a human has approved the specific
+  case and test data.
 - A human owns the final PASS/FAIL decision.
+- The browser remains visible so people can watch operations and intervene.
 
-## Quick start
+## Install after cloning
+
+Run one command from the repository root:
 
 ```bash
 ./install.sh
-# Fill RACHIS_USERNAME and RACHIS_PASSWORD in .env locally.
+```
+
+The installer installs Python 3.12 through `uv`, runs `uv sync`, installs the
+Playwright Chromium browser, and creates `.env` from `.env.example` if `.env`
+does not exist. `uv` must already be installed; see
+<https://docs.astral.sh/uv/getting-started/installation/> if needed.
+
+After installation, fill in `RACHIS_USERNAME` and `RACHIS_PASSWORD` in the
+local `.env` file. It is ignored by Git.
+
+## Start the application
+
+Run the FastAPI service with one command:
+
+```bash
 ./run.sh
 ```
 
-After cloning, `./install.sh` performs the complete setup: it installs the
-project's Python 3.12 runtime, runs `uv sync`, installs the Chromium browser,
-and creates `.env` if it does not already exist. The project is pinned to
-Python 3.12; `uv.lock` records the resolved package versions.
+It starts the service at <http://127.0.0.1:8000>. Additional Uvicorn
+arguments are passed through, for example `./run.sh --reload`.
 
-`./run.sh` is the single command for starting the FastAPI application. Extra
-Uvicorn arguments can be passed through, for example `./run.sh --reload`.
+The current API is intentionally small:
 
-Open `http://127.0.0.1:8000`. The first version exposes health, test-case,
-and append-only event-log endpoints. The browser runner is intentionally
-separate so future models can add voucher-specific behaviour without mixing
-them into the dashboard.
+- `GET /health` — service health check;
+- `GET /api/events` — current JSONL events as a JSON array;
+- `POST /api/events` — append an event; and
+- `GET /` — placeholder dashboard.
 
-## Layout
+The rich dashboard, evidence browser, and live web event stream are not yet
+implemented.
 
-- `app/` — FastAPI service, configuration, event log, and browser runner
-- `test-cases/` — one folder per human-approved test case
-- `docs/` — architecture and contribution boundaries
-- `data/` — local runtime state; ignored by Git
-- Run-local evidence — each case keeps its current `screenshot.png`; image and
-  PDF evidence remains untracked.
+## Run a browser plan
 
-See `docs/ARCHITECTURE.md` before adding new modules.
-
-Run the dependency-free smoke test with:
+The FastAPI service and browser runner are separate processes. After the
+service is running, execute a plan with:
 
 ```bash
-uv run --no-sync python -m unittest discover -s app_tests -v
+uv run python -m app.driver
 ```
+
+The driver reads the highest-numbered run under `test-cases/`, parses its
+`test.html` plan, opens a visible Chromium window, and appends activity to
+`data/events.jsonl`.
+
+To follow events in a second terminal:
+
+```bash
+uv run python -m app.watch
+```
+
+`app.loop` is an older/manual browser-opening path, and `app.runner` is a
+small login/screenshot helper. The canonical plan executor is currently
+`app.driver`; consolidating the remaining paths is tracked in the refactor
+backlog.
+
+## Repository layout
+
+- `app/` — FastAPI service, configuration, event logging, browser runner, and
+  canonical voucher cases;
+- `app/vouchers/` — case-local `test-case.html` instructions;
+- `test-cases/` — numbered run folders containing briefs, plans, and links to
+  the cases under test;
+- `data/events.jsonl` — append-only runtime event log;
+- `docs/` — architecture, design, repository guidance, and refactor notes;
+- `install.sh` — one-step local setup; and
+- `run.sh` — one-step FastAPI startup.
+
+Run-local evidence belongs inside the relevant case folder as `screenshot.png`.
+There is no `artifacts/` output directory.
+
+## Tests
+
+After installation, run the test suite with:
+
+```bash
+uv run python -m unittest discover -s app_tests -v
+```
+
+The tests cover plan parsing, run discovery, route mapping, event logging, and
+execution-loop gates. Live tenant behavior requires credentials and a visible
+browser, so it is not part of the local unit-test suite.
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) before adding modules or
+changing the run lifecycle.
 
