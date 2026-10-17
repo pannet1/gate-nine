@@ -26,10 +26,21 @@
 <div class="note">
 <strong>Ordering is mandatory, not advisory.</strong> The brief states that later tests
 (discount, print) assume posted vouchers created by the earlier ones. Execute steps
-1→17 in sequence. A failure at any step stops the run — do not continue past it.
+0→17 in sequence. A failure at any step stops the run — do not continue past it.
 </div>
 
 <h2>Execution order</h2>
+
+<h2>Phase 0 — Sign in (Test 0)</h2>
+<p>Not a voucher. Every phase below depends on it, so it runs first and on its own.
+The driver performs it from <code>.env</code> — no human is asked to type a credential.</p>
+<table>
+    <tr><th>#</th><th>Voucher</th><th>Check</th><th>Case folder</th></tr>
+    <tr><td>0</td><td>none — sign in</td><td>Credentials from <code>.env</code> submit to
+        <code>/login/?qaction=…</code> and land on <code>/dashboard/</code>; company and
+        fiscal period visible in the header</td>
+        <td class="covered">login/</td></tr>
+</table>
 
 <h2>Phase A — Header fields (Test 1)</h2>
 <p>Establishes the vouchers later phases depend on.</p>
@@ -204,6 +215,8 @@ regenerates both.</p>
   "run_id": "001",
   "source": "Voucher Testing Manual — Accounting & Inventory.md",
   "steps": [
+    {"id": "0",  "phase": "0", "test": "Test 0", "action": "sign-in", "voucher": "Login",
+     "check": "Credentials from .env submit to /login/?qaction=… and land on /dashboard/; company and fiscal period visible in the header"},
     {"id": "1",  "phase": "A", "test": "Test 1", "action": "open-new", "voucher": "Sales Invoice",
      "check": "Header block, title/voucher number, More details, Place of supply with state name + 2-digit code, Payment terms optional"},
     {"id": "2",  "phase": "A", "test": "Test 1", "action": "open-new", "voucher": "Purchase Bill",

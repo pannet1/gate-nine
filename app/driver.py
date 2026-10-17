@@ -195,6 +195,8 @@ async def _perform(page: Any, run_id: str, step: dict[str, Any]) -> str:
     action = step.get("action", "")
     voucher = step.get("voucher", "")
     try:
+        if action == "sign-in":
+            return await _sign_in(page, run_id)
         if action in {"open-new", "print", "draft-post-correct"}:
             return await _open_voucher(page, run_id, voucher)
         return (

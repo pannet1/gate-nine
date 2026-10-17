@@ -54,16 +54,35 @@ class PlanParsingTests(unittest.TestCase):
 
             self.assertEqual([s["id"] for s in plan["steps"]], ["1", "2", "17"])
 
-    def test_every_plan_voucher_has_a_route(self) -> None:
-        """A step whose voucher has no route silently degrades to label-hunting."""
+    # Actions that reach a voucher by navigating to its route. Anything else —
+    # sign-in, for instance — has no route by design.
+    ROUTED_ACTIONS = {"open-new", "print", "draft-post-correct"}
+
+    def test_every_routed_step_has_a_route(self) -> None:
+        """A routed step without a route degrades to label-hunting, silently."""
         real = Path("test-cases/001/test.html")
         if not real.is_file():
             self.skipTest("run 001 not present")
             return
         plan = parse_plan(real)
 
-        unrouted = sorted({s["voucher"] for s in plan["steps"] if route_for(s["voucher"]) is None})
+        unrouted = sorted({
+            s["voucher"] for s in plan["steps"]
+            if s.get("action") in self.ROUTED_ACTIONS and route_for(s["voucher"]) is None
+        })
         self.assertEqual(unrouted, [], f"vouchers with no route: {unrouted}")
+
+    def test_plan_opens_with_sign_in(self) -> None:
+        """Every run begins at the login form, before any voucher is touched."""
+        real = Path("test-cases/001/test.html")
+        if not real.is_file():
+            self.skipTest("run 001 not present")
+            return
+        plan = parse_plan(real)
+
+        first = plan["steps"][0]
+        self.assertEqual(first["action"], "sign-in")
+        self.assertEqual(first["id"], "0")
 
     def test_routes_are_new_voucher_forms(self) -> None:
         for name in ("Sales Invoice", "Purchase Bill", "GRN", "Credit Note", "Debit Note"):
