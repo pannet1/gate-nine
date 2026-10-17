@@ -162,7 +162,12 @@ async def _sign_in(page: Any, run_id: str) -> str:
 
     email = page.locator("input[type=email]")
     password = page.locator("input[type=password]")
-    if not await email.count() or not await password.count():
+    try:
+        # Wait rather than sample: the form may still be rendering after goto,
+        # and a snapshot here reads a missing form as a login failure.
+        await email.first.wait_for(state="visible", timeout=15000)
+        await password.first.wait_for(state="visible", timeout=15000)
+    except Exception:  # noqa: BLE001 - no form is a handover, not a crash
         return f"no login form at {page.url} — sign in yourself"
 
     if not settings.rachis_username or not settings.rachis_password:
@@ -173,9 +178,10 @@ async def _sign_in(page: Any, run_id: str) -> str:
     _log(run_id, "sign_in", {"user": settings.rachis_username})
 
     submit = page.get_by_role("button", name=re.compile(r"^\s*sign in", re.I))
-    if await submit.count():
+    try:
+        await submit.first.wait_for(state="visible", timeout=5000)
         await submit.first.click()
-    else:
+    except Exception:  # noqa: BLE001 - no button is fine, Enter submits the form
         await password.first.press("Enter")
 
     # Wait for the POST to settle rather than sleeping on a guess.
@@ -213,10 +219,15 @@ async def _open_voucher(page: Any, run_id: str, voucher: str) -> str:
     route = VOUCHER_ROUTES.get(_normalise(voucher))
     if route:
         await page.goto(settings.rachis_base_url.rstrip("/") + route, wait_until="domcontentloaded")
-        heading = page.get_by_role("heading", level=1)
-        name = (await heading.first.inner_text(timeout=5000)).strip() if await heading.count() else ""
-        if not name:
-            return f"route {route} opened without a heading — check the window"
+        # The tenant is client-rendered, so domcontentloaded lands before the
+        # heading exists. Wait for it rather than sampling once — count() here
+        # was a snapshot, which made every voucher look like it failed to open.
+        heading = page.get_by_role("heading", level=1).first
+        try:
+            await heading.wait_for(state="visible", timeout=15000)
+        except Exception:  # noqa: BLE001 - a voucher that never renders hands over
+            return f"route {route} never showed a heading — check the window"
+        name = (await heading.inner_text()).strip()
         _log(run_id, "open_voucher", {"voucher": voucher, "route": route, "heading": name})
         return "ok"
 
