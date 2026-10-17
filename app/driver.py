@@ -1,0 +1,234 @@
+"""Drive a run's test.html in a visible browser, with a human able to take over.
+
+Playwright executes the plan; the human watches and intervenes where needed.
+The browser is never headless — seeing fields get entered is the point of the
+project (index.html §1).
+
+Commands between steps:
+    Enter   continue to the next step
+    p       pause — stop driving, leave the browser open for manual work
+    r       restart the flow from step 1
+    q       quit
+
+An action with no handler is not a failure: it is an intervention point. The
+driver stops, says what it could not do, and hands the window to the human.
+"""
+
+import asyncio
+import json
+import re
+from pathlib import Path
+from typing import Any
+
+from playwright.async_api import async_playwright
+
+from .config import settings
+from .events import append_event
+
+HEADLESS = False
+PLAN_MARKER = 'id="plan"'
+
+# New-voucher routes, read off the live tenant 2026-10-17. The plan's voucher
+# names are normalised before lookup, so "GRN" reaches the route whose own
+# heading reads "Goods Receipt".
+VOUCHER_ROUTES = {
+    "sales invoice": "/accounting/sales-invoices/new/",
+    "purchase bill": "/accounting/bills/new/",
+    "grn": "/accounting/grns/new/",
+    "goods receipt": "/accounting/grns/new/",
+    "credit note": "/accounting/credit-notes/new/",
+    "debit note": "/accounting/debit-notes/new/",
+}
+
+
+def _normalise(voucher: str) -> str:
+    """Fold a plan's voucher name down to its lookup key."""
+    return re.sub(r"\s+", " ", voucher).strip().lower()
+
+
+def route_for(voucher: str) -> str | None:
+    """The new-voucher route for a plan's voucher name, or None if unknown."""
+    return VOUCHER_ROUTES.get(_normalise(voucher))
+
+
+def parse_plan(test_html: Path) -> dict[str, Any]:
+    """Read the JSON plan block out of a generated test.html.
+
+    The prose tables in that file are for humans; only this block drives code.
+    """
+    if not test_html.is_file():
+        raise FileNotFoundError(f"no plan at {test_html}")
+    text = test_html.read_text(encoding="utf-8")
+    start = text.find("<script", text.find(PLAN_MARKER) - 60 if PLAN_MARKER in text else 0)
+    if PLAN_MARKER not in text:
+        raise ValueError(f"{test_html} has no plan block")
+    start = text.index(">", text.index("<script", start)) + 1
+    end = text.index("</script>", start)
+    return json.loads(text[start:end])
+
+
+def plan_path(run_dir: Path) -> Path:
+    return run_dir / "test.html"
+
+
+def announce(step: dict[str, Any], index: int, total: int) -> None:
+    print(f"\n[{index}/{total}] step {step['id']} · {step.get('test', '')} · {step.get('action', '')}")
+    print(f"    voucher: {step.get('voucher', '?')}")
+    print(f"    check:   {step.get('check', '')}")
+
+
+async def prompt() -> str:
+    """Ask the human what to do next, without blocking the event loop."""
+    line = await asyncio.to_thread(input, "\n  [Enter]=next  p=pause  r=restart  q=quit > ")
+    return line.strip().lower()
+
+
+async def drive(run_dir: Path) -> dict[str, Any]:
+    """Run the plan in a visible browser until finished, paused, or quit."""
+    plan = parse_plan(plan_path(run_dir))
+    steps: list[dict[str, Any]] = plan.get("steps", [])
+    run_id = plan.get("run_id", run_dir.name)
+    summary: dict[str, Any] = {"run_id": run_id, "total": len(steps), "completed": [], "stopped": None}
+
+    if not steps:
+        summary["stopped"] = "empty-plan"
+        return summary
+
+    settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=HEADLESS)
+        page = await browser.new_page()
+        await page.goto(settings.rachis_base_url, wait_until="domcontentloaded")
+        _log(run_id, "open_url", {"url": settings.rachis_base_url})
+        await _fill_login(page, run_id)
+
+        index = 0
+        while index < len(steps):
+            step = steps[index]
+            announce(step, index + 1, len(steps))
+
+            outcome = await _perform(page, run_id, step)
+            if outcome != "ok":
+                print(f"    ! {outcome} — the window is yours. Fix it, then choose below.")
+
+            command = await prompt()
+            if command == "q":
+                summary["stopped"] = "quit"
+                summary["at"] = step["id"]
+                break
+            if command == "r":
+                print("    restarting from step 1")
+                _log(run_id, "restart", {"at": step["id"]})
+                await page.goto(settings.rachis_base_url, wait_until="domcontentloaded")
+                await _fill_login(page, run_id)
+                index = 0
+                summary["completed"].clear()
+                continue
+            if command == "p":
+                print("    paused — drive the browser by hand. Re-run to resume.")
+                _log(run_id, "pause", {"at": step["id"]})
+                summary["stopped"] = "paused"
+                summary["at"] = step["id"]
+                break
+
+            if outcome == "ok":
+                summary["completed"].append(step["id"])
+                _log(run_id, "step_ok", {"id": step["id"], "action": step.get("action")})
+            index += 1
+
+        # Leave the window open for inspection; close only on quit.
+        if summary["stopped"] != "quit":
+            print(f"\n  plan finished at {len(summary['completed'])}/{len(steps)} steps — browser left open.")
+            await page.wait_for_event("close")
+        else:
+            await browser.close()
+
+    return summary
+
+
+async def _fill_login(page: Any, run_id: str) -> None:
+    """Fill credentials if the fields are present. Never submits."""
+    if settings.rachis_username and await page.locator("input[type=email], input[name=username]").count():
+        await page.locator("input[type=email], input[name=username]").first.fill(settings.rachis_username)
+        _log(run_id, "fill_username", {})
+    if settings.rachis_password and await page.locator("input[type=password]").count():
+        await page.locator("input[type=password]").first.fill(settings.rachis_password)
+        _log(run_id, "fill_password", {})
+
+
+async def _perform(page: Any, run_id: str, step: dict[str, Any]) -> str:
+    """Attempt a step's action. Returns 'ok' or a human-readable reason it needs a human."""
+    action = step.get("action", "")
+    voucher = step.get("voucher", "")
+    try:
+        if action in {"open-new", "print", "draft-post-correct"}:
+            return await _open_voucher(page, run_id, voucher)
+        return (
+            f"no handler for action '{action}' on {voucher} — the voucher handlers are not "
+            "written yet, so this step is yours"
+        )
+    except Exception as exc:  # noqa: BLE001 - a failed action must hand over, not crash
+        return f"step failed: {type(exc).__name__}: {exc}"
+
+
+async def _open_voucher(page: Any, run_id: str, voucher: str) -> str:
+    """Open a blank voucher by navigating to its route.
+
+    Route-first rather than control-first: a new-voucher button is not present
+    on every page, so label-hunting only worked when one happened to be on
+    screen. Navigation works from anywhere. A voucher with no known route still
+    falls through to label-hunting, and failing that becomes an intervention
+    point rather than a wrong click.
+
+    Routes confirmed against the live tenant on 2026-10-17.
+    """
+    route = VOUCHER_ROUTES.get(_normalise(voucher))
+    if route:
+        await page.goto(settings.rachis_base_url.rstrip("/") + route, wait_until="domcontentloaded")
+        heading = page.get_by_role("heading", level=1)
+        name = (await heading.first.inner_text(timeout=5000)).strip() if await heading.count() else ""
+        if not name:
+            return f"route {route} opened without a heading — check the window"
+        _log(run_id, "open_voucher", {"voucher": voucher, "route": route, "heading": name})
+        return "ok"
+
+    label = _normalise(voucher)
+    candidates = [
+        page.get_by_role("link", name=re.compile(label, re.I)),
+        page.get_by_role("button", name=re.compile(label, re.I)),
+        page.get_by_text(re.compile(rf"^\s*new\s+{re.escape(label)}\b", re.I)),
+    ]
+    for locator in candidates:
+        if await locator.count():
+            await locator.first.click(timeout=4000)
+            _log(run_id, "open_voucher", {"voucher": voucher, "via": "label"})
+            return "ok"
+    return f"no route for '{label}' and no control on this page — open it yourself"
+
+
+def _log(run_id: str, action: str, details: dict[str, Any]) -> None:
+    append_event(settings.event_log_path, test_id=run_id, action=action, details=details)
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Drive a run's test.html with a human in the loop.")
+    parser.add_argument("root", nargs="?", default="test-cases", help="runs root (default: test-cases)")
+    parser.add_argument("--plan", help="explicit path to a test.html, bypassing run discovery")
+    args = parser.parse_args()
+
+    from .planner import find_latest_run
+
+    if args.plan:
+        run_dir = Path(args.plan).parent
+    else:
+        run_dir = find_latest_run(Path(args.root))
+        if run_dir is None:
+            raise SystemExit("no run_id folder found")
+
+    print(json.dumps(asyncio.run(drive(run_dir)), indent=2, ensure_ascii=False))
+
+
+if __name__ == "__main__":
+    main()

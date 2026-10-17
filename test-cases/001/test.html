@@ -196,5 +196,55 @@ screenshot, and the voucher number if one was created. Send to Murugan directly.
 brief and regenerate.
 </div>
 
+<h2>Machine-readable plan</h2>
+<p>The driver reads this block; the tables above are for humans. Regenerating the file
+regenerates both.</p>
+<script type="application/json" id="plan">
+{
+  "run_id": "001",
+  "source": "Voucher Testing Manual — Accounting & Inventory.md",
+  "steps": [
+    {"id": "1",  "phase": "A", "test": "Test 1", "action": "open-new", "voucher": "Sales Invoice",
+     "check": "Header block, title/voucher number, More details, Place of supply with state name + 2-digit code, Payment terms optional"},
+    {"id": "2",  "phase": "A", "test": "Test 1", "action": "open-new", "voucher": "Purchase Bill",
+     "check": "Same as step 1 with Vendor in place of Customer"},
+    {"id": "3",  "phase": "A", "test": "Test 1", "action": "open-new", "voucher": "GRN",
+     "check": "Same as step 1 with Vendor in place of Customer"},
+    {"id": "4",  "phase": "B", "test": "Test 2", "action": "open-new", "voucher": "Sales Invoice",
+     "check": "Base currency default; dropdown lists only enabled currencies; Exchange rate appears for non-base and hides on switch back"},
+    {"id": "5",  "phase": "B", "test": "Test 2", "action": "open-new", "voucher": "Purchase Bill",
+     "check": "Currency box behaves as step 4"},
+    {"id": "6",  "phase": "C", "test": "Test 3", "action": "add-line", "voucher": "Sales Invoice",
+     "check": "HSN under item name; Rate autofills; Qty computes Amount read-only; GST% accepts only configured rates; Tab opens new row"},
+    {"id": "7",  "phase": "C", "test": "Test 3", "action": "set-line-discount", "voucher": "Sales Invoice",
+     "check": "Discount as % or flat amount reduces Amount; persists across draft save and reopen"},
+    {"id": "8",  "phase": "D", "test": "Test 4", "action": "set-header-discount", "voucher": "Sales Invoice",
+     "check": "Control near totals with % toggle; eligible base equals sum of lines after line discounts; totals update"},
+    {"id": "9",  "phase": "D", "test": "Test 4", "action": "reject-header-discount", "voucher": "Sales Invoice",
+     "check": "Negative, over-100%, and over-base all show inline error and block Save"},
+    {"id": "10", "phase": "D", "test": "Test 4", "action": "open-new", "voucher": "Purchase Bill",
+     "check": "Header discount present and usable even with invoice-discount setting OFF"},
+    {"id": "11", "phase": "D", "test": "Test 4", "action": "open-new", "voucher": "Credit Note",
+     "check": "Header discount folds in correctly when the parent invoice had one"},
+    {"id": "12", "phase": "D", "test": "Test 4", "action": "open-new", "voucher": "Debit Note",
+     "check": "Same as step 11 against a parent bill"},
+    {"id": "13", "phase": "E", "test": "Test 5", "action": "verify-tax", "voucher": "Sales Invoice",
+     "check": "Interstate splits as IGST"},
+    {"id": "14", "phase": "E", "test": "Test 5", "action": "verify-tax", "voucher": "Sales Invoice",
+     "check": "Intrastate splits equally as CGST + SGST"},
+    {"id": "15", "phase": "E", "test": "Test 5", "action": "verify-tax", "voucher": "Credit Note",
+     "check": "Shows the original rate from the parent invoice, not today's rate"},
+    {"id": "16", "phase": "F", "test": "Test 6", "action": "draft-post-correct", "voucher": "Sales Invoice",
+     "check": "Save draft then Post yields the same document; stays read-only on screen; Correct requires a reason; New resets to blank"},
+    {"id": "17a","phase": "G", "test": "Test 7", "action": "print", "voucher": "Sales Invoice",
+     "check": "Margins, readable payment terms label, right-aligned amounts, Disc (₹) header, dd-mm-yyyy, separate Discount/GST/Round-off lines"},
+    {"id": "17b","phase": "G", "test": "Test 7", "action": "print", "voucher": "Purchase Bill",
+     "check": "Same as step 17a"},
+    {"id": "17c","phase": "G", "test": "Test 7", "action": "print", "voucher": "Credit Note",
+     "check": "Same as step 17a"}
+  ]
+}
+</script>
+
 </body>
 </html>
