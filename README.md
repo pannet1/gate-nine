@@ -84,6 +84,9 @@ uv run python -m app.diagnose
 This is a read-only diagnosis gate. It reports missing plans, missing archived
 logs, unhandled actions, and failed steps. It does not decide that a product
 bug exists; failures require human-in-loop browser review before escalation.
+During a run, Playwright console errors, uncaught page errors, failed network
+requests, and page crashes are also written to the JSONL log with the active
+step context when available. Request query strings and fragments are omitted.
 
 `app.driver` is the sole browser-plan executor. The FastAPI service remains a
 separate process so it can expose the event log while the visible browser run

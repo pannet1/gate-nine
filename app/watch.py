@@ -23,9 +23,8 @@ def format_event(event: dict) -> str:
     stamp = str(event.get("timestamp", ""))[:19].replace("T", " ")
     action = event.get("action", "")
     details = event.get("details") or {}
-    test_id = event.get("test_id", "")
     subject = " ".join(str(value) for value in details.values() if value != "")
-    return f"{stamp}  {action:<16} {test_id:<14} {subject}".rstrip()
+    return f"{stamp}  {action:<24} {subject}".rstrip()
 
 
 def watch() -> None:

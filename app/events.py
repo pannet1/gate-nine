@@ -4,10 +4,9 @@ from pathlib import Path
 from typing import Any
 
 
-def append_event(path: Path, *, test_id: str, action: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
+def append_event(path: Path, *, action: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
     event = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "test_id": test_id,
         "action": action,
         "details": details or {},
     }

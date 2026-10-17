@@ -1,18 +1,18 @@
 """Drive a run's test.html in a visible browser, unattended.
 
-Playwright executes the plan start to finish. Nothing waits for input: each
-step runs, the window holds for a fixed pause so human eyes can follow what was
-entered, and the next step fires. The browser is never headless — seeing fields
-get entered is the point of the project (index.html §1).
+Playwright executes the plan in a visible browser. Setup steps (sign-in and
+navigation) are distinct from checks; a run cannot pass without a check, and
+the first unsupported action stops it as incomplete.
 
 Each step's outcome is appended to the JSONL event log, so a run leaves a
 machine-readable record of what it did and where it stopped.
 
 How a step is classified:
-    ok          the action ran.
+    ok          an assertion/check action ran successfully.
+    setup       navigation or authentication succeeded; this is not a test pass.
     no-handler  this harness has no driver for the action yet — a gap in the
                 tool, not a failure of the product. Recorded, then the run
-                continues past it.
+                stops as incomplete.
     failed      the action was attempted and did not succeed. The run stops
                 here: continuing from a broken state only produces noise.
 """
@@ -22,6 +22,7 @@ import json
 import re
 from pathlib import Path
 from typing import Any, NamedTuple
+from urllib.parse import urlsplit, urlunsplit
 
 from .config import settings
 from .events import append_event
@@ -48,13 +49,13 @@ VOUCHER_ROUTES = {
 # Actions the harness actually completes. Everything else opens a voucher at
 # most, which is not the action asked for and must not be reported as done —
 # opening a form is not printing it, and it is not posting a correction.
-ROUTED_ACTIONS = {"open-new"}
+ROUTED_ACTIONS = {"open"}
 
 
 class Outcome(NamedTuple):
     """What became of one step."""
 
-    status: str  # "ok" | "no-handler" | "failed"
+    status: str  # "ok" | "setup" | "no-handler" | "failed"
     detail: str = ""
 
 
@@ -130,36 +131,80 @@ def announce(step: dict[str, Any], index: int, total: int) -> None:
     The plan carries the order; the case carries the steps.
     """
     case = step.get("case", "")
-    print(f"\n[{index}/{total}] step {step['id']} · {step.get('action', '')} · {case}/")
+    print(f"\n[{index}/{total}] {step.get('action', '')} {step.get('type', '')} · {case}/")
     print(f"    method:  app/vouchers/{case}/test-case.html")
 
 
+def _safe_request_url(url: str) -> str:
+    """Keep request diagnostics useful without recording query/fragment data."""
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+
+
+def attach_playwright_diagnostics(page: Any, run_id: str, step_context: dict[str, Any]) -> None:
+    """Record browser console, page, request, and crash diagnostics as JSONL."""
+    def context() -> dict[str, Any]:
+        return dict(step_context)
+
+    def on_console(message: Any) -> None:
+        if message.type == "error":
+            _log(run_id, "playwright_console_error", {**context(), "message": message.text})
+
+    def on_page_error(error: BaseException) -> None:
+        _log(run_id, "playwright_page_error", {**context(), "error": str(error)})
+
+    def on_request_failed(request: Any) -> None:
+        _log(
+            run_id,
+            "playwright_request_failed",
+            {
+                **context(),
+                "url": _safe_request_url(request.url),
+                "method": request.method,
+                "resource_type": request.resource_type,
+                "failure": request.failure,
+            },
+        )
+
+    def on_crash() -> None:
+        _log(run_id, "playwright_page_crash", context())
+
+    page.on("console", on_console)
+    page.on("pageerror", on_page_error)
+    page.on("requestfailed", on_request_failed)
+    page.on("crash", on_crash)
+
+
 async def drive(run_dir: Path) -> dict[str, Any]:
-    """Run the whole plan in a visible browser, unattended."""
+    """Run the plan visibly; never equate setup with a passing test."""
     plan = parse_plan(plan_path(run_dir))
     prepare_event_log(run_dir)
     steps: list[dict[str, Any]] = plan.get("steps", [])
-    run_id = plan.get("run_id", run_dir.name)
+    run_id = run_dir.name
     summary: dict[str, Any] = {
-        "run_id": run_id,
         "total": len(steps),
-        "counts": {"ok": 0, "no-handler": 0, "failed": 0},
+        "counts": {"ok": 0, "setup": 0, "no-handler": 0, "failed": 0},
         "failed": None,
+        "status": "incomplete",
     }
 
     try:
         _log(run_id, "run_start", {"run_dir": str(run_dir), "steps": len(steps)})
         if not steps:
-            summary["failed"] = {"step": None, "detail": "empty-plan"}
+            summary["failed"] = {"step_number": None, "detail": "empty-plan"}
         else:
             from playwright.async_api import async_playwright
 
             async with async_playwright() as playwright:
                 browser = await playwright.chromium.launch(headless=HEADLESS)
                 page = await browser.new_page()
+                active_step: dict[str, Any] = {}
+                attach_playwright_diagnostics(page, run_id, active_step)
                 # No bootstrap sign-in here. The plan's sign-in step owns it.
 
                 for index, step in enumerate(steps):
+                    active_step.clear()
+                    active_step.update({"step_number": index + 1, "action": step.get("action"), "type": step.get("type"), "case": step.get("case")})
                     announce(step, index + 1, len(steps))
                     outcome = await _perform(page, run_id, step)
                     summary["counts"][outcome.status] += 1
@@ -167,24 +212,32 @@ async def drive(run_dir: Path) -> dict[str, Any]:
                     _log(
                         run_id,
                         f"step_{outcome.status.replace('-', '_')}",
-                        {"id": step["id"], "action": step.get("action"), "detail": outcome.detail},
+                        {"step_number": index + 1, "action": step.get("action"), "type": step.get("type"), "case": step.get("case"), "detail": outcome.detail},
                     )
-                    if outcome.status == "failed":
-                        summary["failed"] = {"step": step["id"], "detail": outcome.detail}
+                    if outcome.status in {"no-handler", "failed"}:
+                        summary["failed"] = {"step_number": index + 1, "action": step.get("action"), "type": step.get("type"), "detail": outcome.detail}
                         break
                     if index + 1 < len(steps):
                         await asyncio.sleep(settings.step_delay)
 
                 await browser.close()
-        _log(run_id, "run_result", {**summary["counts"], "failed": summary["failed"]})
+        has_check = any(step.get("action") == "verify" for step in steps)
+        if summary["counts"]["failed"] > 0:
+            summary["status"] = "failed"
+        elif has_check and summary["counts"]["ok"] + summary["counts"]["setup"] == len(steps):
+            summary["status"] = "passed"
+        else:
+            summary["status"] = "incomplete"
+        _log(run_id, "run_result", {**summary["counts"], "failed": summary["failed"], "status": summary["status"]})
         counts = summary["counts"]
         print(
-            f"  {counts['ok']} ok · {counts['no-handler']} no handler · {counts['failed']} failed"
-            + (f" — stopped at step {summary['failed']['step']}" if summary["failed"] else "")
+            f"  {counts['ok']} checks · {counts['setup']} setup · {counts['no-handler']} no handler · {counts['failed']} failed · {summary['status']}"
+            + (f" — stopped at step {summary['failed'].get('step_number') or '?'}" if summary["failed"] else "")
         )
         return summary
     except Exception as exc:  # noqa: BLE001 - archive before surfacing run failure
-        summary["failed"] = {"step": None, "detail": f"{type(exc).__name__}: {exc}"}
+        summary["status"] = "failed"
+        summary["failed"] = {"step_number": None, "detail": f"{type(exc).__name__}: {exc}"}
         _log(run_id, "run_failed", summary["failed"])
         raise
     finally:
@@ -248,12 +301,16 @@ async def _perform(page: Any, run_id: str, step: dict[str, Any]) -> Outcome:
     case = step.get("case", "")
     try:
         if action == "sign-in":
-            return await _sign_in(page, run_id)
-        if action in ROUTED_ACTIONS:
-            return await _open_voucher(page, run_id, case)
+            outcome = await _sign_in(page, run_id)
+            return Outcome("setup", outcome.detail) if outcome.status == "ok" else outcome
+        if action in ROUTED_ACTIONS and step.get("type") == "new-voucher":
+            outcome = await _open_voucher(page, run_id, case)
+            return Outcome("setup", outcome.detail) if outcome.status == "ok" else outcome
         # No driver written for this action yet. Opening the voucher would not
         # be the action asked for, so it is recorded as a gap, never as a pass.
-        return Outcome("no-handler", f"no handler for action '{action}'")
+        step_type = step.get("type")
+        label = f"{action} {step_type}" if step_type else action
+        return Outcome("no-handler", f"no handler for '{label}'")
     except Exception as exc:  # noqa: BLE001 - a crash is a failure, not a traceback
         return Outcome("failed", f"{type(exc).__name__}: {exc}")
 
@@ -299,7 +356,7 @@ async def _open_voucher(page: Any, run_id: str, case: str) -> Outcome:
 
 
 def _log(run_id: str, action: str, details: dict[str, Any]) -> None:
-    append_event(settings.event_log_path, test_id=run_id, action=action, details=details)
+    append_event(settings.event_log_path, action=action, details={"run_folder": run_id, **details})
 
 
 def main() -> None:

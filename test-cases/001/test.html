@@ -36,25 +36,25 @@ folder's <code>test-case.html</code> and nowhere else.</p>
 <table>
     <tr><th>#</th><th>Test</th><th>Action</th><th>Case folder</th></tr>
     <tr><td>0</td><td>Test 0</td><td>sign-in</td><td class="covered">login/</td></tr>
-    <tr><td>1</td><td>Test 1</td><td>open-new</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>2</td><td>Test 1</td><td>open-new</td><td class="covered">purchase-bill/</td></tr>
-    <tr><td>3</td><td>Test 1</td><td>open-new</td><td class="covered">goods-receipt/</td></tr>
-    <tr><td>4</td><td>Test 2</td><td>open-new</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>5</td><td>Test 2</td><td>open-new</td><td class="covered">purchase-bill/</td></tr>
-    <tr><td>6</td><td>Test 3</td><td>add-line</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>7</td><td>Test 3</td><td>set-line-discount</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>8</td><td>Test 4</td><td>set-header-discount</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>9</td><td>Test 4</td><td>reject-header-discount</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>10</td><td>Test 4</td><td>open-new</td><td class="covered">purchase-bill/</td></tr>
-    <tr><td>11</td><td>Test 4</td><td>open-new</td><td class="covered">credit-note/</td></tr>
-    <tr><td>12</td><td>Test 4</td><td>open-new</td><td class="covered">debit-note/</td></tr>
-    <tr><td>13</td><td>Test 5</td><td>verify-tax</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>14</td><td>Test 5</td><td>verify-tax</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>15</td><td>Test 5</td><td>verify-tax</td><td class="covered">credit-note/</td></tr>
-    <tr><td>16</td><td>Test 6</td><td>draft-post-correct</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>17a</td><td>Test 7</td><td>print</td><td class="covered">sales-invoice/</td></tr>
-    <tr><td>17b</td><td>Test 7</td><td>print</td><td class="covered">purchase-bill/</td></tr>
-    <tr><td>17c</td><td>Test 7</td><td>print</td><td class="covered">credit-note/</td></tr>
+    <tr><td>1</td><td>Test 1</td><td>open new-voucher</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>2</td><td>Test 1</td><td>open new-voucher</td><td class="covered">purchase-bill/</td></tr>
+    <tr><td>3</td><td>Test 1</td><td>open new-voucher</td><td class="covered">goods-receipt/</td></tr>
+    <tr><td>4</td><td>Test 2</td><td>open new-voucher</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>5</td><td>Test 2</td><td>open new-voucher</td><td class="covered">purchase-bill/</td></tr>
+    <tr><td>6</td><td>Test 3</td><td>add line</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>7</td><td>Test 3</td><td>set line-discount</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>8</td><td>Test 4</td><td>set header-discount</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>9</td><td>Test 4</td><td>reject header-discount</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>10</td><td>Test 4</td><td>open new-voucher</td><td class="covered">purchase-bill/</td></tr>
+    <tr><td>11</td><td>Test 4</td><td>open new-voucher</td><td class="covered">credit-note/</td></tr>
+    <tr><td>12</td><td>Test 4</td><td>open new-voucher</td><td class="covered">debit-note/</td></tr>
+    <tr><td>13</td><td>Test 5</td><td>verify tax</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>14</td><td>Test 5</td><td>verify tax</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>15</td><td>Test 5</td><td>verify tax</td><td class="covered">credit-note/</td></tr>
+    <tr><td>16</td><td>Test 6</td><td>draft</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>17</td><td>Test 7</td><td>print</td><td class="covered">sales-invoice/</td></tr>
+    <tr><td>18</td><td>Test 7</td><td>print</td><td class="covered">purchase-bill/</td></tr>
+    <tr><td>19</td><td>Test 7</td><td>print</td><td class="covered">credit-note/</td></tr>
 </table>
 <p class="note"><strong>Phase order is dependency order, not preference.</strong> Later tests
 assume vouchers posted by earlier ones: the header discount (Test 4) needs lines already
@@ -129,29 +129,28 @@ brief and regenerate.
 expected results, because those belong to each case folder and to nowhere else.</p>
 <script type="application/json" id="plan">
 {
-  "run_id": "001",
   "source": "Voucher Testing Manual — Accounting & Inventory.md",
   "steps": [
-    {"id": "0",  "phase": "0", "test": "Test 0", "action": "sign-in", "case": "login"},
-    {"id": "1",  "phase": "A", "test": "Test 1", "action": "open-new", "case": "sales-invoice"},
-    {"id": "2",  "phase": "A", "test": "Test 1", "action": "open-new", "case": "purchase-bill"},
-    {"id": "3",  "phase": "A", "test": "Test 1", "action": "open-new", "case": "goods-receipt"},
-    {"id": "4",  "phase": "B", "test": "Test 2", "action": "open-new", "case": "sales-invoice"},
-    {"id": "5",  "phase": "B", "test": "Test 2", "action": "open-new", "case": "purchase-bill"},
-    {"id": "6",  "phase": "C", "test": "Test 3", "action": "add-line", "case": "sales-invoice"},
-    {"id": "7",  "phase": "C", "test": "Test 3", "action": "set-line-discount", "case": "sales-invoice"},
-    {"id": "8",  "phase": "D", "test": "Test 4", "action": "set-header-discount", "case": "sales-invoice"},
-    {"id": "9",  "phase": "D", "test": "Test 4", "action": "reject-header-discount", "case": "sales-invoice"},
-    {"id": "10", "phase": "D", "test": "Test 4", "action": "open-new", "case": "purchase-bill"},
-    {"id": "11", "phase": "D", "test": "Test 4", "action": "open-new", "case": "credit-note"},
-    {"id": "12", "phase": "D", "test": "Test 4", "action": "open-new", "case": "debit-note"},
-    {"id": "13", "phase": "E", "test": "Test 5", "action": "verify-tax", "case": "sales-invoice"},
-    {"id": "14", "phase": "E", "test": "Test 5", "action": "verify-tax", "case": "sales-invoice"},
-    {"id": "15", "phase": "E", "test": "Test 5", "action": "verify-tax", "case": "credit-note"},
-    {"id": "16", "phase": "F", "test": "Test 6", "action": "draft-post-correct", "case": "sales-invoice"},
-    {"id": "17a","phase": "G", "test": "Test 7", "action": "print", "case": "sales-invoice"},
-    {"id": "17b","phase": "G", "test": "Test 7", "action": "print", "case": "purchase-bill"},
-    {"id": "17c","phase": "G", "test": "Test 7", "action": "print", "case": "credit-note"}
+    {"phase": "0", "test": "Test 0", "action": "sign-in", "case": "login"},
+    {"phase": "A", "test": "Test 1", "action": "open", "type": "new-voucher", "case": "sales-invoice"},
+    {"phase": "A", "test": "Test 1", "action": "open", "type": "new-voucher", "case": "purchase-bill"},
+    {"phase": "A", "test": "Test 1", "action": "open", "type": "new-voucher", "case": "goods-receipt"},
+    {"phase": "B", "test": "Test 2", "action": "open", "type": "new-voucher", "case": "sales-invoice"},
+    {"phase": "B", "test": "Test 2", "action": "open", "type": "new-voucher", "case": "purchase-bill"},
+    {"phase": "C", "test": "Test 3", "action": "add", "type": "line", "case": "sales-invoice"},
+    {"phase": "C", "test": "Test 3", "action": "set", "type": "line-discount", "case": "sales-invoice"},
+    {"phase": "D", "test": "Test 4", "action": "set", "type": "header-discount", "case": "sales-invoice"},
+    {"phase": "D", "test": "Test 4", "action": "reject", "type": "header-discount", "case": "sales-invoice"},
+    {"phase": "D", "test": "Test 4", "action": "open", "type": "new-voucher", "case": "purchase-bill"},
+    {"phase": "D", "test": "Test 4", "action": "open", "type": "new-voucher", "case": "credit-note"},
+    {"phase": "D", "test": "Test 4", "action": "open", "type": "new-voucher", "case": "debit-note"},
+    {"phase": "E", "test": "Test 5", "action": "verify", "type": "tax", "case": "sales-invoice"},
+    {"phase": "E", "test": "Test 5", "action": "verify", "type": "tax", "case": "sales-invoice"},
+    {"phase": "E", "test": "Test 5", "action": "verify", "type": "tax", "case": "credit-note"},
+    {"phase": "F", "test": "Test 6", "action": "draft", "type": "voucher", "case": "sales-invoice"},
+    {"phase": "G", "test": "Test 7", "action": "print", "type": "voucher", "case": "sales-invoice"},
+    {"phase": "G", "test": "Test 7", "action": "print", "type": "voucher", "case": "purchase-bill"},
+    {"phase": "G", "test": "Test 7", "action": "print", "type": "voucher", "case": "credit-note"}
   ]
 }
 </script>

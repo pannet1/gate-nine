@@ -95,10 +95,16 @@ must not silently classify a harness limitation as a product failure.
 `app.runner` modules were removed. FastAPI remains a separate service, and
 `app.watch` remains a terminal log viewer rather than another runner.
 
-### 2. Decide how unsupported actions affect the run
+### 2. Stop incomplete runs and separate setup from checks — complete
 
-Only `sign-in` and `open-new` are implemented. These actions currently have no
-handlers:
+The driver records sign-in and opening a new voucher as setup, not passed
+checks. Unsupported actions stop the run as `incomplete`, so the runner cannot
+continue through a plan while silently skipping its actual tests. The plan uses
+typed verb/target pairs (for example `open` + `new-voucher`) and dynamic step
+numbers; it does not author IDs. Events derive run identity from the run folder
+and do not duplicate it in a `test_id` field.
+
+Still without handlers:
 
 - `add-line`
 - line and header discounts
@@ -106,13 +112,9 @@ handlers:
 - draft/post/correct
 - print
 
-The current design explicitly records these as `no-handler` and continues.
-That is useful for exposing all harness gaps in one pass, but it also means a
-run can finish while most of its test was never performed.
-
-Decision needed: retain the current continue-and-report behavior, or make an
-unsupported action stop the run. Under either choice, a human verdict must not
-be available as `passed` when required actions were skipped.
+The harness previously recorded these as `no-handler` and continued past them.
+They now stop the run as `incomplete` on the first unsupported action, ensuring
+that opening a voucher form is never reported as completing a test.
 
 Relevant code: [`app/driver.py`](../app/driver.py), especially `_perform()` and
 the run summary.
@@ -214,6 +216,11 @@ The read-only evidence gate is implemented and tested. The actual browser
 repair session remains case-specific and must be driven from a concrete
 diagnosis; it is not an autonomous mutation step.
 
+The runner logs Playwright console errors, uncaught page exceptions, failed
+requests, page crashes, and action exceptions into the active run log. The
+diagnosis gate surfaces these as `playwright_errors` and requests human browser
+review; it leaves product-bug classification undetermined.
+
 ### 9. Reconcile repository and documentation drift
 
 Known inconsistencies include:
@@ -270,9 +277,10 @@ The project needs a repeatable verification baseline including:
 
 Work through the backlog in this order:
 
-1. Decide and enforce the unsupported-action policy.
+1. Implement and validate remaining typed action handlers against canonical
+   case methods; use human-approved data for any write action.
 2. Implement missing-voucher browser training.
-3. Define the structured case action contract.
+3. Turn prose-only case instructions into executable, evidence-backed steps.
 4. Implement evidence capture and redaction.
 5. Add post-run AI diagnosis and developer bug triage.
 6. Reconcile documentation and repository shape.

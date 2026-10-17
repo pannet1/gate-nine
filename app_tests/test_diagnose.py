@@ -37,6 +37,7 @@ class DiagnosisTests(unittest.TestCase):
                     {"action": "step_no_handler"},
                     {"action": "step_failed"},
                     {"action": "run_failed"},
+                    {"action": "playwright_page_error", "details": {"error": "JS error"}},
                 ],
             )
             result = diagnose(Path(directory))
@@ -44,6 +45,7 @@ class DiagnosisTests(unittest.TestCase):
             self.assertEqual(len(result["harness_gaps"]), 1)
             self.assertTrue(result["human_browser_review_required"])
             self.assertTrue(result["developer_review_required"])
+            self.assertEqual(len(result["playwright_errors"]), 1)
             self.assertEqual(result["product_bug_status"], "undetermined")
 
     def test_highest_run_is_selected(self) -> None:

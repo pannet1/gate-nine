@@ -12,6 +12,13 @@ from typing import Any
 from .events import read_events
 from .planner import find_latest_run
 
+PLAYWRIGHT_ERRORS = {
+    "playwright_console_error",
+    "playwright_page_error",
+    "playwright_request_failed",
+    "playwright_page_crash",
+}
+
 
 def diagnose(root: Path = Path("test-cases")) -> dict[str, Any]:
     """Return a read-only diagnosis gate for the highest-numbered run."""
@@ -46,9 +53,15 @@ def diagnose(root: Path = Path("test-cases")) -> dict[str, Any]:
     result["run_failures"] = [
         event for event in events if event.get("action") == "run_failed"
     ]
-    result["developer_review_required"] = bool(result["failed_steps"] or result["run_failures"])
+    result["playwright_errors"] = [
+        event for event in events if event.get("action") in PLAYWRIGHT_ERRORS
+    ]
+    result["developer_review_required"] = bool(
+        result["failed_steps"] or result["run_failures"] or result["playwright_errors"]
+    )
     result["human_browser_review_required"] = bool(
         result["harness_gaps"] or result["failed_steps"] or result["run_failures"]
+        or result["playwright_errors"]
     )
     result["product_bug_status"] = "undetermined"
     return result

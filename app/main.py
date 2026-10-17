@@ -28,8 +28,8 @@ def events() -> list[dict]:
 
 
 @app.post("/api/events")
-def create_event(test_id: str, action: str) -> dict:
-    return append_event(settings.event_log_path, test_id=test_id, action=action)
+def create_event(action: str) -> dict:
+    return append_event(settings.event_log_path, action=action)
 
 
 @app.get("/", response_class=HTMLResponse)

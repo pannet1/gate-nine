@@ -109,9 +109,9 @@ with a human in the loop to create the new case document.</p>
 empties the root <code>events.jsonl</code>, opens a visible browser, and runs until the
 tests succeed or a test fails. It then moves the root log into the run folder.</p>
 <p><strong>Step D — AI diagnoses the run.</strong> When the highest run folder contains both
-<code>test.html</code> and its archived JSONL log, the AI uses them to repair harness errors
-through a human-in-the-loop Playwright session. If the evidence indicates a real Rachis
-bug, the AI informs the developer.</p>
+<code>test.html</code> and its archived JSONL log, the AI runs <code>app.diagnose</code> to
+identify and report harness gaps, failed steps, and browser errors before human-in-the-loop
+Playwright repair. If the evidence indicates a real Rachis bug, the AI informs the developer.</p>
 <pre>events.jsonl                  # active root log
 test-cases/001/events.jsonl   # archived after the run</pre>
 
@@ -132,24 +132,28 @@ prompts, and nothing waits for a keystroke.</p>
     <li>Between steps the runner holds for a fixed delay — <code>step_delay</code>, default
         3 seconds, set by <code>STEP_DELAY</code> — so human eyes can follow what was just
         entered before the next action fires.</li>
-    <li>A step whose action has no handler is recorded as such and the run continues past it.
-        That is a gap in the harness, not a failure of the product.</li>
+    <li>A step whose action has no handler is recorded and stops the run as
+        <code>incomplete</code>. Opening a form is not counted as completing its test.</li>
     <li>A step that genuinely fails stops the run there, per §5. The browser closes and
         the terminal returns.</li>
     <li>Every step's outcome is written to the append-only JSONL event log. A summary is
         printed when the run ends.</li>
     <li><code>uv run python -m app.watch</code> tails the root <code>events.jsonl</code> to a
         second terminal, so the run can be followed without looking at the browser.</li>
+    <li><code>uv run python -m app.diagnose</code> inspects the completed run folder for Step D,
+        verifying that <code>test.html</code> and <code>events.jsonl</code> are present, surfacing
+        unhandled actions, failed steps, and Playwright error diagnostics before human-in-the-loop review.</li>
 </ol>
 <p class="note">No <code>.md</code> file in the run folder means the loop does not
 proceed. It does not guess and does not fall back to any other source.</p>
 
 <h2>6. Lifecycle</h2>
 <p>Per case: <code>draft → ai-prepared → human-approved → running → passed | failed</code></p>
-<p>Per run: <code>brief-present → plan → running → failed</code> on the first failing case,
-or <code>passed</code> when every case in the folder has passed.</p>
-<p>A failed run is not resumed. The next attempt is a fresh <code>run_id</code>
-(<code>002</code>, <code>003</code>, …) with the corrected brief.</p>
+<p>Per run: <code>brief-present → plan → running → incomplete | failed | passed</code></p>
+<p>The runner stops as <code>incomplete</code> on the first unhandled action, stops as <code>failed</code>
+on the first step failure or crash, and only reports <code>passed</code> when every step passes and at least
+one verification check has executed. A failed or incomplete run is not resumed. The next attempt is a fresh
+<code>run_id</code> (<code>002</code>, <code>003</code>, …) with the corrected brief or harness.</p>
 
 <h2>7. Logging</h2>
 <p>Every operation is logged as <code>operation &lt;name:value&gt; &lt;form name&gt;</code>:</p>
@@ -159,11 +163,13 @@ save screenshot voucher
 delete screenshot voucher
 click home delivery note</pre>
 <p>Logs are append-only JSONL — the active root <code>events.jsonl</code>, archived into the
-run folder after completion — and carry test ID, action,
-safe details, and timestamp. Each step logs one <code>step_ok</code>,
-<code>step_no_handler</code>, or <code>step_failed</code> event; a run ends with a
-<code>run_result</code> event carrying its counts. The team wants a live
-relay of the current operation so Murugan and Jashveer see real-time progress.</p>
+run folder after completion — and carry action, dynamic step number, safe details, and
+timestamp. The run folder is the run identity; no separate test ID is recorded. Each step logs one <code>step_setup</code>,
+<code>step_ok</code>, <code>step_no_handler</code>, or <code>step_failed</code> event; a run ends with a
+<code>run_result</code> event carrying counts and final status (<code>passed</code>, <code>incomplete</code>, or <code>failed</code>).
+During the run, Playwright diagnostics (<code>playwright_console_error</code>, <code>playwright_page_error</code>,
+<code>playwright_request_failed</code>, <code>playwright_page_crash</code>) are recorded with active step context.
+The team wants a live relay of the current operation so Murugan and Jashveer see real-time progress.</p>
 
 <h2>8. Infra</h2>
 <ul>
@@ -174,6 +180,9 @@ relay of the current operation so Murugan and Jashveer see real-time progress.</
         <code>/api/events</code>, and a dashboard at <code>http://127.0.0.1:8000</code>.</li>
     <li><code>app.driver</code> is the sole browser runner and remains separate from
         the FastAPI dashboard so voucher-specific behaviour does not mix into the API.</li>
+    <li><code>app.diagnose</code> is the read-only post-run diagnosis gate (Step D) that inspects the latest
+        run folder and surfaces harness gaps or browser errors, keeping product-bug classification undetermined
+        until human browser review.</li>
     <li>Runtime data is gitignored: <code>.env</code>, <code>data/</code>, and
         every run-local screenshot. Evidence may quote tenant data, so it is never
         committed.</li>
@@ -191,15 +200,11 @@ relay of the current operation so Murugan and Jashveer see real-time progress.</
 
 <h2>10. Open items</h2>
 <ul>
-    <li><strong>Voucher handlers.</strong> <code>app/driver.py</code> completes
-        <code>sign-in</code> and <code>open-new</code>. The other seven plan actions —
-        <code>add-line</code>, <code>set-line-discount</code>, <code>set-header-discount</code>,
-        <code>reject-header-discount</code>, <code>verify-tax</code>,
-        <code>draft-post-correct</code>, <code>print</code> — have no handler yet, so each
-        is recorded as <code>no-handler</code> and the run moves on. Opening a voucher is not
-        printing it or posting a correction, so those steps must never be reported as done
-        on the strength of a form appearing. Writing these seven is what stands between now
-        and a fully driven run.</li>
+    <li><strong>Voucher handlers.</strong> <code>app/driver.py</code> can sign in and open
+        a new voucher (<code>open</code> / <code>new-voucher</code>). Typed verbs for adding
+        lines, setting or rejecting discounts, verifying tax, drafting, and printing remain
+        unimplemented. The runner now stops as <code>incomplete</code> at the first such
+        action; merely opening a voucher is never reported as a completed test.</li>
     <li><strong>Live tenant routes.</strong> The five vouchers in the plan are
         confirmed against the live tenant (2026-10-17) and open by route rather
         than by hunting for a control: Sales Invoice → <code>/accounting/sales-invoices/new/</code>,

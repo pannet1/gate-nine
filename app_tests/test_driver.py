@@ -7,16 +7,18 @@ from app.driver import (
     HEADLESS,
     ROUTED_ACTIONS,
     archive_event_log,
+    attach_playwright_diagnostics,
     parse_plan,
     plan_path,
     prepare_event_log,
     route_for,
 )
+from app.events import read_events
 
 
-def write_plan(directory: str, steps: list[dict] | None = None, *, with_block: bool = True, run_id: str = "001") -> Path:
+def write_plan(directory: str, steps: list[dict] | None = None, *, with_block: bool = True) -> Path:
     path = Path(directory) / "test.html"
-    payload = {"run_id": run_id, "steps": steps if steps is not None else [{"id": "1", "action": "open-new", "voucher": "Sales Invoice"}]}
+    payload = {"steps": steps if steps is not None else [{"action": "open", "type": "new-voucher", "case": "sales-invoice"}]}
     block = f'<script type="application/json" id="plan">\n{json.dumps(payload)}\n</script>' if with_block else ""
     path.write_text(f"<!DOCTYPE html>\n<html><body>\n<h1>Plan</h1>\n<table><tr><td>prose for humans</td></tr></table>\n{block}\n</body></html>", encoding="utf-8")
     return path
@@ -28,10 +30,9 @@ class PlanParsingTests(unittest.TestCase):
 
     def test_reads_json_block_from_html(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
-            plan = parse_plan(write_plan(directory, run_id="042"))
+            plan = parse_plan(write_plan(directory))
 
-            self.assertEqual(plan["run_id"], "042")
-            self.assertEqual(plan["steps"][0]["voucher"], "Sales Invoice")
+            self.assertEqual(plan["steps"][0]["case"], "sales-invoice")
 
     def test_missing_file_raises(self) -> None:
         with self.assertRaises(FileNotFoundError):
@@ -107,12 +108,60 @@ class PlanParsingTests(unittest.TestCase):
             finally:
                 settings.event_log_path = original
 
-    def test_steps_keep_stable_ids_and_order(self) -> None:
-        steps = [{"id": str(n), "action": "open-new", "voucher": "Sales Invoice"} for n in (1, 2, 17)]
+    def test_playwright_diagnostics_are_logged_with_active_step_context(self) -> None:
+        from app.config import settings
+
+        class Emitter:
+            def __init__(self) -> None:
+                self.handlers = {}
+
+            def on(self, event: str, handler) -> None:
+                self.handlers[event] = handler
+
+        class ConsoleMessage:
+            type = "error"
+            text = "uncaught application error"
+
+        class Request:
+            url = "https://tenant.example/path?token=secret#fragment"
+            method = "GET"
+            resource_type = "fetch"
+            failure = "net::ERR_FAILED"
+
+        with tempfile.TemporaryDirectory() as directory:
+            original = settings.event_log_path
+            settings.event_log_path = Path(directory) / "events.jsonl"
+            context = {"step_number": 4, "action": "open", "type": "new-voucher", "case": "sales-invoice"}
+            page = Emitter()
+            try:
+                attach_playwright_diagnostics(page, "001", context)
+                page.handlers["console"](ConsoleMessage())
+                page.handlers["pageerror"](RuntimeError("uncaught page exception"))
+                page.handlers["requestfailed"](Request())
+                page.handlers["crash"]()
+
+                events = read_events(settings.event_log_path)
+                self.assertEqual(
+                    [event["action"] for event in events],
+                    [
+                        "playwright_console_error",
+                        "playwright_page_error",
+                        "playwright_request_failed",
+                        "playwright_page_crash",
+                    ],
+                )
+                self.assertEqual(events[0]["details"]["step_number"], 4)
+                self.assertEqual(events[2]["details"]["url"], "https://tenant.example/path")
+                self.assertNotIn("secret", events[2]["details"]["url"])
+            finally:
+                settings.event_log_path = original
+
+    def test_steps_need_no_authored_ids(self) -> None:
+        steps = [{"action": "open", "type": "new-voucher", "case": "sales-invoice"} for _ in range(3)]
         with tempfile.TemporaryDirectory() as directory:
             plan = parse_plan(write_plan(directory, steps))
 
-            self.assertEqual([s["id"] for s in plan["steps"]], ["1", "2", "17"])
+            self.assertTrue(all("id" not in step for step in plan["steps"]))
 
     # Anything else — sign-in, for instance — has no route by design.
     def test_every_routed_step_has_a_route(self) -> None:
@@ -141,7 +190,7 @@ class PlanParsingTests(unittest.TestCase):
             return
         plan = parse_plan(real)
 
-        allowed = {"id", "phase", "test", "action", "case"}
+        allowed = {"phase", "test", "action", "type", "case"}
         for step in plan["steps"]:
             with self.subTest(step=step.get("id")):
                 extra = set(step) - allowed
@@ -160,7 +209,7 @@ class PlanParsingTests(unittest.TestCase):
 
         first = plan["steps"][0]
         self.assertEqual(first["action"], "sign-in")
-        self.assertEqual(first["id"], "0")
+        self.assertEqual(first["action"], "sign-in")
 
     def test_routes_are_new_voucher_forms(self) -> None:
         for name in ("Sales Invoice", "Purchase Bill", "GRN", "Credit Note", "Debit Note"):
@@ -189,7 +238,7 @@ class PlanParsingTests(unittest.TestCase):
 
         self.assertTrue(plan["steps"], "plan has no steps")
         for step in plan["steps"]:
-            for field in ("id", "action", "case"):
+            for field in ("action", "case"):
                 self.assertIn(field, step, f"step missing {field}: {step}")
 
 
@@ -203,6 +252,150 @@ class UnattendedRunTests(unittest.TestCase):
 
         self.assertFalse(hasattr(driver, "prompt"), "prompting is gone; drive() runs the whole plan")
         self.assertNotIn("input(", inspect.getsource(driver), "no step may block on stdin")
+
+    def test_perform_distinguishes_setup_from_unsupported(self) -> None:
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from app.driver import Outcome, _perform
+
+        mock_page = MagicMock()
+        with patch("app.driver._sign_in", new_callable=AsyncMock) as mock_sign_in, \
+             patch("app.driver._open_voucher", new_callable=AsyncMock) as mock_open:
+            mock_sign_in.return_value = Outcome("ok", "signed in")
+            mock_open.return_value = Outcome("ok", "opened")
+
+            res1 = asyncio.run(_perform(mock_page, "001", {"action": "sign-in", "case": "login"}))
+            self.assertEqual(res1.status, "setup")
+
+            res2 = asyncio.run(_perform(mock_page, "001", {"action": "open", "type": "new-voucher", "case": "sales-invoice"}))
+            self.assertEqual(res2.status, "setup")
+
+            res3 = asyncio.run(_perform(mock_page, "001", {"action": "add", "type": "line", "case": "sales-invoice"}))
+            self.assertEqual(res3.status, "no-handler")
+            self.assertEqual(res3.detail, "no handler for 'add line'")
+
+            res4 = asyncio.run(_perform(mock_page, "001", {"action": "custom"}))
+            self.assertEqual(res4.status, "no-handler")
+            self.assertEqual(res4.detail, "no handler for 'custom'")
+
+    def test_drive_stops_at_first_unsupported_action(self) -> None:
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from app.config import settings
+        from app.driver import Outcome, drive
+
+        steps = [
+            {"action": "open", "type": "new-voucher", "case": "sales-invoice"},
+            {"action": "add", "type": "line", "case": "sales-invoice"},
+            {"action": "print", "type": "voucher", "case": "sales-invoice"},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory) / "002"
+            run_dir.mkdir()
+            write_plan(str(run_dir), steps)
+            orig_log = settings.event_log_path
+            orig_delay = settings.step_delay
+            settings.event_log_path = Path(directory) / "events.jsonl"
+            settings.step_delay = 0.0
+
+            mock_page = MagicMock()
+            mock_page.on = MagicMock()
+            mock_browser = MagicMock()
+            mock_browser.new_page = AsyncMock(return_value=mock_page)
+            mock_browser.close = AsyncMock()
+            mock_playwright = MagicMock()
+            mock_playwright.chromium.launch = AsyncMock(return_value=mock_browser)
+
+            class MockAsyncPlaywrightContext:
+                async def __aenter__(self):
+                    return mock_playwright
+
+                async def __aexit__(self, *args):
+                    pass
+
+            try:
+                with patch("playwright.async_api.async_playwright", return_value=MockAsyncPlaywrightContext()), \
+                     patch("app.driver._open_voucher", new_callable=AsyncMock) as mock_open:
+                    mock_open.return_value = Outcome("ok", "")
+                    summary = asyncio.run(drive(run_dir))
+
+                self.assertEqual(summary["status"], "incomplete")
+                self.assertEqual(summary["counts"]["setup"], 1)
+                self.assertEqual(summary["counts"]["no-handler"], 1)
+                self.assertEqual(summary["counts"]["ok"], 0)
+                self.assertEqual(summary["counts"]["failed"], 0)
+                self.assertEqual(summary["failed"]["step_number"], 2)
+                self.assertEqual(summary["failed"]["action"], "add")
+
+                archived = run_dir / "events.jsonl"
+                self.assertTrue(archived.exists())
+                events = read_events(archived)
+                actions = [e["action"] for e in events]
+                self.assertIn("run_start", actions)
+                self.assertIn("step_setup", actions)
+                self.assertIn("step_no_handler", actions)
+                self.assertIn("run_result", actions)
+                # Verify step 3 was NOT executed
+                step_numbers = [e["details"].get("step_number") for e in events if "step_number" in e.get("details", {})]
+                self.assertEqual(step_numbers, [1, 2])
+            finally:
+                settings.event_log_path = orig_log
+                settings.step_delay = orig_delay
+
+    def test_drive_stops_on_step_failure(self) -> None:
+        import asyncio
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from app.config import settings
+        from app.driver import Outcome, drive
+
+        steps = [
+            {"action": "open", "type": "new-voucher", "case": "sales-invoice"},
+            {"action": "open", "type": "new-voucher", "case": "purchase-bill"},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            run_dir = Path(directory) / "003"
+            run_dir.mkdir()
+            write_plan(str(run_dir), steps)
+            orig_log = settings.event_log_path
+            orig_delay = settings.step_delay
+            settings.event_log_path = Path(directory) / "events.jsonl"
+            settings.step_delay = 0.0
+
+            mock_page = MagicMock()
+            mock_page.on = MagicMock()
+            mock_browser = MagicMock()
+            mock_browser.new_page = AsyncMock(return_value=mock_page)
+            mock_browser.close = AsyncMock()
+            mock_playwright = MagicMock()
+            mock_playwright.chromium.launch = AsyncMock(return_value=mock_browser)
+
+            class MockAsyncPlaywrightContext:
+                async def __aenter__(self):
+                    return mock_playwright
+
+                async def __aexit__(self, *args):
+                    pass
+
+            try:
+                with patch("playwright.async_api.async_playwright", return_value=MockAsyncPlaywrightContext()), \
+                     patch("app.driver._open_voucher", new_callable=AsyncMock) as mock_open:
+                    mock_open.side_effect = [Outcome("ok", ""), Outcome("failed", "element not found")]
+                    summary = asyncio.run(drive(run_dir))
+
+                self.assertEqual(summary["status"], "failed")
+                self.assertEqual(summary["counts"]["setup"], 1)
+                self.assertEqual(summary["counts"]["failed"], 1)
+                self.assertEqual(summary["failed"]["step_number"], 2)
+
+                archived = run_dir / "events.jsonl"
+                self.assertTrue(archived.exists())
+                events = read_events(archived)
+                actions = [e["action"] for e in events]
+                self.assertIn("step_failed", actions)
+                self.assertIn("run_result", actions)
+            finally:
+                settings.event_log_path = orig_log
+                settings.step_delay = orig_delay
 
 
 if __name__ == "__main__":
