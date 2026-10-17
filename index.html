@@ -98,7 +98,24 @@ the document. Dead versions are not wanted.</p>
 whatever its author chose. Only the <code>.md</code> extension matters, because that is
 what the loop looks for.</p>
 
-<h2>4. Main loop</h2>
+<h2>4. Intended workflow</h2>
+<p><strong>Step A — human creates the run.</strong> A human writes the brief and creates
+the next numbered run folder. The system never invents a run folder.</p>
+<p><strong>Step B — AI prepares the plan and cases.</strong> If the highest run folder has no
+<code>test.html</code>, the AI reads the brief and creates it. The AI checks that every
+voucher in the plan has a canonical case. If one is missing, the AI trains on the browser
+with a human in the loop to create the new case document.</p>
+<p><strong>Step C — the main loop runs visibly.</strong> It verifies <code>test.html</code>,
+empties the root <code>events.jsonl</code>, opens a visible browser, and runs until the
+tests succeed or a test fails. It then moves the root log into the run folder.</p>
+<p><strong>Step D — AI diagnoses the run.</strong> When the highest run folder contains both
+<code>test.html</code> and its archived JSONL log, the AI uses them to repair harness errors
+through a human-in-the-loop Playwright session. If the evidence indicates a real Rachis
+bug, the AI informs the developer.</p>
+<pre>events.jsonl                  # active root log
+test-cases/001/events.jsonl   # archived after the run</pre>
+
+<h2>5. Main loop details</h2>
 <p><strong>Playwright drives; the human watches.</strong> The run is unattended — nothing
 prompts, and nothing waits for a keystroke.</p>
 <ol>
@@ -121,33 +138,34 @@ prompts, and nothing waits for a keystroke.</p>
         the terminal returns.</li>
     <li>Every step's outcome is written to the append-only JSONL event log. A summary is
         printed when the run ends.</li>
-    <li><code>uv run python -m app.watch</code> tails <code>data/events.jsonl</code> to a
+    <li><code>uv run python -m app.watch</code> tails the root <code>events.jsonl</code> to a
         second terminal, so the run can be followed without looking at the browser.</li>
 </ol>
 <p class="note">No <code>.md</code> file in the run folder means the loop does not
 proceed. It does not guess and does not fall back to any other source.</p>
 
-<h2>5. Lifecycle</h2>
+<h2>6. Lifecycle</h2>
 <p>Per case: <code>draft → ai-prepared → human-approved → running → passed | failed</code></p>
 <p>Per run: <code>brief-present → plan → running → failed</code> on the first failing case,
 or <code>passed</code> when every case in the folder has passed.</p>
 <p>A failed run is not resumed. The next attempt is a fresh <code>run_id</code>
 (<code>002</code>, <code>003</code>, …) with the corrected brief.</p>
 
-<h2>6. Logging</h2>
+<h2>7. Logging</h2>
 <p>Every operation is logged as <code>operation &lt;name:value&gt; &lt;form name&gt;</code>:</p>
 <pre>input product:hamam voucher
 create screenshot voucher
 save screenshot voucher
 delete screenshot voucher
 click home delivery note</pre>
-<p>Logs are append-only JSONL — <code>data/events.jsonl</code> — and carry test ID, action,
+<p>Logs are append-only JSONL — the active root <code>events.jsonl</code>, archived into the
+run folder after completion — and carry test ID, action,
 safe details, and timestamp. Each step logs one <code>step_ok</code>,
 <code>step_no_handler</code>, or <code>step_failed</code> event; a run ends with a
-<code>run_result</code> event naming the result file and its counts. The team wants a live
+<code>run_result</code> event carrying its counts. The team wants a live
 relay of the current operation so Murugan and Jashveer see real-time progress.</p>
 
-<h2>7. Infra</h2>
+<h2>8. Infra</h2>
 <ul>
     <li>Remote terminal-only compute for the developers to watch the live log.</li>
     <li>A web server alongside the log, presenting the run's files in a rich HTML
@@ -161,7 +179,7 @@ relay of the current operation so Murugan and Jashveer see real-time progress.</
         committed.</li>
 </ul>
 
-<h2>8. Safety</h2>
+<h2>9. Safety</h2>
 <ul>
     <li>Never commit <code>.env</code>, tenant credentials, customer data, or unredacted evidence.</li>
     <li>The runner may open and inspect the tenant but must not create or post a voucher
@@ -171,7 +189,7 @@ relay of the current operation so Murugan and Jashveer see real-time progress.</
         files. The human writes the brief and the approval.</li>
 </ul>
 
-<h2>9. Open items</h2>
+<h2>10. Open items</h2>
 <ul>
     <li><strong>Voucher handlers.</strong> <code>app/driver.py</code> completes
         <code>sign-in</code> and <code>open-new</code>. The other seven plan actions —

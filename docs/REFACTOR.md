@@ -29,12 +29,65 @@ The current components are:
 - `app/loop.py` — an older/manual browser-opening path.
 - `app/runner.py` — a separate login and screenshot helper.
 
-The intended lifecycle is:
+## Intended workflow
+
+The refactor must support this workflow exactly.
+
+### Step A — Human creates the run
+
+1. A human writes the brief.
+2. A human creates the next numbered run folder under `test-cases/`.
+
+The main loop must not invent a run folder or run without a human-created run.
+
+### Step B — AI prepares the plan and cases
+
+The AI checks the highest-numbered run folder.
+
+- If `test.html` already exists, preserve it and continue to Step C.
+- If `test.html` does not exist, the AI reads the brief and generates it.
+- The AI checks whether every voucher referenced by the plan has a canonical
+  case document under `app/vouchers/`.
+- If a voucher case is missing, the AI enters a human-in-the-loop browser
+  training flow to create the new voucher case document before continuing.
+
+The human remains responsible for correcting the brief, trained method, and
+test data. The plan carries execution order; the voucher case owns the method.
+
+### Step C — Main loop executes visibly
+
+The main loop then:
+
+1. verifies that `test.html` exists in the highest-numbered run folder;
+2. empties or initializes the root JSONL event log before the run;
+3. opens a visible browser;
+4. executes the plan until all tests succeed or a test fails; and
+5. moves the completed root JSONL log into that run folder.
+
+The target root log is a temporary per-run file, for example:
 
 ```text
-human brief → AI-generated plan → human approval → visible browser run
-→ evidence/logs → human PASS/FAIL
+events.jsonl                  # exists only while the run is active
+test-cases/001/events.jsonl   # archived after the run ends
 ```
+
+The browser must remain visible throughout the run. A successful run and a
+failed run both archive their log. The archive operation must also happen when
+the runner is interrupted or crashes, where the operating environment permits
+cleanup.
+
+### Step D — AI diagnoses the completed run
+
+After the run ends, the AI checks the highest-numbered run folder.
+
+- If both `test.html` and the archived JSONL log exist, the AI uses them to
+  identify and repair harness errors through a human-in-the-loop Playwright
+  session.
+- If the evidence indicates a genuine Rachis product bug rather than a harness
+  or test-data problem, the AI informs the developer.
+
+The AI must not silently classify a product bug as a harness failure, and it
+must not silently classify a harness limitation as a product failure.
 
 ## Refactor backlog
 

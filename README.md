@@ -63,9 +63,11 @@ service is running, execute a plan with:
 uv run python -m app.driver
 ```
 
-The driver reads the highest-numbered run under `test-cases/`, parses its
-`test.html` plan, opens a visible Chromium window, and appends activity to
-`data/events.jsonl`.
+The target main loop reads the highest-numbered run under `test-cases/`, parses
+its `test.html` plan, opens a visible Chromium window, and appends activity to
+the root `events.jsonl` while the run is active, then archives it inside the
+completed run folder. The current implementation is being brought into this
+workflow; the details are tracked in [`docs/REFACTOR.md`](docs/REFACTOR.md).
 
 To follow events in a second terminal:
 
@@ -85,7 +87,7 @@ backlog.
 - `app/vouchers/` — case-local `test-case.html` instructions;
 - `test-cases/` — numbered run folders containing briefs, plans, and links to
   the cases under test;
-- `data/events.jsonl` — append-only runtime event log;
+- `events.jsonl` — temporary root event log, archived into the completed run;
 - `docs/` — architecture, design, repository guidance, and refactor notes;
 - `install.sh` — one-step local setup; and
 - `run.sh` — one-step FastAPI startup.
