@@ -51,6 +51,8 @@ observable is the wrong change.</p>
 document, holding its <code>test-case.html</code>. A run never owns a voucher; it links
 to one.</p>
 <pre>app/vouchers/                 # canonical — one folder per unique document
+├── login/
+│   └── test-case.html
 ├── sales-invoice/
 │   └── test-case.html
 ├── purchase-bill/
@@ -59,6 +61,9 @@ to one.</p>
 │   └── test-case.html
 └── credit-note/
     └── test-case.html</pre>
+<p><strong>Login is a case, not a voucher.</strong> It holds no voucher type and appears in no
+voucher phase — it is the door every other case walks through, so it lives here for the same
+reason the others do and is linked into every run. Every <code>test.html</code> opens with it.</p>
 <p>A human creates a uniquely numbered run folder — the <strong>run_id</strong>, zero-padded
 (<code>001</code>, <code>002</code>, …) — and drops in a Markdown brief plus symlinks to
 the vouchers under test. The runner never invents a run_id; it only ever reads the
@@ -67,10 +72,13 @@ highest-numbered folder that already exists.</p>
 └── 001/                    # run_id — created by a human
     ├── &lt;any-name&gt;.md       # brief from Murugesan — name is free, only .md matters
     ├── test.html           # the ordered test plan
-    ├── sales-invoice -&gt;  ../../../app/vouchers/sales-invoice
-    ├── purchase-bill -&gt;  ../../../app/vouchers/purchase-bill
-    ├── goods-receipt -&gt;  ../../../app/vouchers/goods-receipt
-    └── credit-note   -&gt;  ../../../app/vouchers/credit-note</pre>
+    ├── login           -&gt;  ../../app/vouchers/login
+    ├── sales-invoice   -&gt;  ../../app/vouchers/sales-invoice
+    ├── purchase-bill   -&gt;  ../../app/vouchers/purchase-bill
+    ├── goods-receipt   -&gt;  ../../app/vouchers/goods-receipt
+    └── credit-note     -&gt;  ../../app/vouchers/credit-note</pre>
+<p>The depth is <code>../../</code>, not <code>../../../</code> — two levels up from the run
+folder reaches the project root.</p>
 <p><strong>Revised in place, not versioned.</strong> A voucher is one live document. A later
 run linking it sees whatever it says now, and revising it for a later run rewrites what an
 earlier run pointed at — accepted, because history is carried by the run's evidence, not by
@@ -211,6 +219,15 @@ real-time progress.</p>
         finishing or quitting now closes it and returns the terminal; <strong>pause</strong>
         remains the one case that keeps the window, since driving it by hand is the point
         of pausing.</td><td>Karthick</td></tr>
+    <tr><td>2026-10-17</td><td><strong>Login made a canonical case.</strong> It is not a
+        voucher, but every <code>test.html</code> opens with it, so it moved to
+        <code>app/vouchers/login/test-case.html</code> and is symlinked into
+        <code>001/</code> like the four vouchers — the gate now discovers five case
+        folders. Written against the live form: POST to <code>/login/?qaction=…</code>,
+        fields <code>email</code> and <code>password</code>, success landing on
+        <code>/dashboard/</code>. The deliberately-wrong-password case is documented but
+        not run, because the tenant footer says sign-in events are audited. Corrected
+        §3's symlink depth, which still read <code>../../../</code> from before that fix.</td><td>Karthick</td></tr>
 </table>
 
 </body>

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test 0 - Sign in</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1, h2, h3 { color: #333; }
+        .precondition, .test-data { margin-bottom: 20px; }
+        .caution { background: #fffbe6; border: 1px solid #e6d98a; padding: 10px; }
+    </style>
+</head>
+<body>
+    <h1>Test 0 — Sign in</h1>
+    <p><strong>Voucher type:</strong> none — this is the door every other case walks
+        through</p>
+
+    <div class="precondition">
+        <strong>Preconditions:</strong><br>
+        - A tenant user exists with a known email and password<br>
+        - Credentials are held in <code>.env</code> as <code>RACHIS_USERNAME</code> and
+        <code>RACHIS_PASSWORD</code>, never in this file
+    </div>
+
+    <div class="test-data">
+        <strong>Test data:</strong><br>
+        - Email: from <code>.env</code><br>
+        - Password: from <code>.env</code><br>
+        - Remember me: left unchecked unless the run is meant to outlive itself
+    </div>
+
+    <p>This case is the reason <code>test.html</code> lists login first. Nothing below
+        the header block, no voucher route, and no line item can be reached until this
+        passes, so it is checked on its own before the voucher phases begin. The driver
+        performs it automatically from <code>.env</code> — a human is never asked to type
+        a username or password.</p>
+
+    <h2>Steps</h2>
+    <ol>
+        <li>Open <code>/login/</code></li>
+        <li>Verify the page identifies itself: heading "Sign in to Rachis Books", the
+            "SECURE ACCESS" marker, and "STEP 1 OF 1 — CREDENTIALS"</li>
+        <li>Verify the production marker reads <code>PRODUCTION · AP-SOUTH-1</code>, so a
+            run against the wrong environment is visible before any data is touched</li>
+        <li>Verify exactly two credential fields: Email Address
+            (<code>type=email</code>, autocomplete <code>email</code>) and Password
+            (<code>type=password</code>, autocomplete <code>current-password</code>)</li>
+        <li>Verify "Show password" toggles the password field's masking, and that it
+            starts masked</li>
+        <li>Verify "Keep me signed in for 30 days" starts unchecked</li>
+        <li>Fill Email Address and Password from <code>.env</code></li>
+        <li>Submit with the "SIGN IN" button</li>
+        <li>Verify the form POSTs to <code>/login/?qaction=…</code> and that a hidden
+            <code>redirect_to</code> field is carried with it</li>
+        <li>Verify the browser is redirected off <code>/login/</code> and lands on
+            <code>/dashboard/</code></li>
+        <li>Verify the signed-in header shows the company ("Ecomsense") and fiscal
+            period ("FY 2025 ▾") switchers, confirming which tenant the run is inside</li>
+        <li>Verify the driver reports "ok" and moves to step 1 without pausing</li>
+    </ol>
+
+    <h2>Failure behaviour</h2>
+    <div class="caution">
+        <p><strong>A deliberately wrong password is not attempted here by default.</strong>
+            The tenant footer states that all sign-in events are audited and that sessions
+            expire after 8 hours of inactivity. Firing a known-bad credential at a
+            production system risks a lockout and leaves an audit entry that looks like
+            an attack. If the negative case is wanted, a human decides it explicitly and
+            once — it is not part of an ordinary run.</p>
+        <p>Expected if it is ever run: the page stays on <code>/login/</code> and shows
+            "The email or password is incorrect. Please try again." Nothing is redirected,
+            and no voucher screen is reached.</p>
+    </div>
+
+    <h2>Expected result</h2>
+    <ul>
+        <li>The login form is present with both credential fields and a working
+            Show password toggle</li>
+        <li>Submit posts to <code>/login/?qaction=…</code> and redirects to
+            <code>/dashboard/</code></li>
+        <li>The signed-in header names the company and fiscal period, so the run's
+            target tenant is never in doubt</li>
+        <li>The driver continues to the voucher cases without any human typing a
+            credential</li>
+    </ul>
+
+    <h2>Out of scope</h2>
+    <ul>
+        <li>Account creation (<code>/signup</code>) and password reset
+            (<code>/forgot-password</code>) — both exist as links and are not exercised</li>
+        <li>The Terms of Service and Privacy Policy links</li>
+        <li>Session expiry mid-run — noted as an 8 hour inactivity limit, not tested</li>
+    </ul>
+</body>
+</html>
