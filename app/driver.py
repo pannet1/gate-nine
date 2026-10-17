@@ -25,7 +25,7 @@ from typing import Any, NamedTuple
 from urllib.parse import urlsplit, urlunsplit
 
 from .config import settings
-from .events import append_event
+from .events import send_event
 
 HEADLESS = False
 PLAN_MARKER = 'id="plan"'
@@ -96,25 +96,6 @@ def plan_path(run_dir: Path) -> Path:
     return run_dir / "test.html"
 
 
-def prepare_event_log(run_dir: Path) -> Path:
-    """Create an empty root log for a new run."""
-    root = settings.event_log_path
-    root.parent.mkdir(parents=True, exist_ok=True)
-    root.write_text("", encoding="utf-8")
-    return root
-
-
-def archive_event_log(run_dir: Path) -> Path:
-    """Move the active root log into the completed run folder, overwriting any previous log."""
-    root = settings.event_log_path
-    archive = run_dir / "events.jsonl"
-    if not root.exists():
-        raise FileNotFoundError(f"active event log does not exist: {root}")
-    archive.parent.mkdir(parents=True, exist_ok=True)
-    root.replace(archive)
-    return archive
-
-
 def announce(step: dict[str, Any], index: int, total: int) -> None:
     """Name the step and point at its case folder — never restate the method.
 
@@ -169,7 +150,6 @@ def attach_playwright_diagnostics(page: Any, run_id: str, step_context: dict[str
 async def drive(run_dir: Path) -> dict[str, Any]:
     """Run the plan visibly; never equate setup with a passing test."""
     plan = parse_plan(plan_path(run_dir))
-    prepare_event_log(run_dir)
     steps: list[dict[str, Any]] = plan.get("steps", [])
     run_id = run_dir.name
     summary: dict[str, Any] = {
@@ -226,13 +206,11 @@ async def drive(run_dir: Path) -> dict[str, Any]:
             + (f" — stopped at step {summary['failed'].get('step_number') or '?'}" if summary["failed"] else "")
         )
         return summary
-    except Exception as exc:  # noqa: BLE001 - archive before surfacing run failure
+    except Exception as exc:  # noqa: BLE001 - log the failure then surface it
         summary["status"] = "failed"
         summary["failed"] = {"step_number": None, "detail": f"{type(exc).__name__}: {exc}"}
         _log(run_id, "run_failed", summary["failed"])
         raise
-    finally:
-        archive_event_log(run_dir)
 
 
 async def _sign_in(page: Any, run_id: str) -> Outcome:
@@ -536,8 +514,21 @@ async def _open_voucher(page: Any, run_id: str, case: str) -> Outcome:
     return Outcome("no-handler", f"no route for '{case}/' and no control on this page")
 
 
-def _log(run_id: str, action: str, details: dict[str, Any]) -> None:
-    append_event(settings.event_log_path, action=action, details={"run_folder": run_id, **details})
+def _log(run_id: str, action: str, details: dict[str, Any] | None = None) -> None:
+    """Send one event to the remote FastAPI endpoint over HTTP Basic Auth.
+
+    Silently skipped when no events_url is configured — no local log is kept.
+    """
+    if not settings.events_url:
+        return
+    send_event(
+        settings.events_url,
+        settings.events_username,
+        settings.events_password,
+        test_id=run_id,
+        action=action,
+        details={"run_folder": run_id, **(details or {})},
+    )
 
 
 def main() -> None:

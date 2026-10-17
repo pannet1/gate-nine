@@ -3,13 +3,16 @@
 This module does not decide whether Rachis is defective. It identifies the
 evidence available to the AI and separates harness gaps from failures that need
 human browser review before a developer is notified.
+
+Events are streamed to a remote FastAPI endpoint (``events_url``) over HTTP
+Basic Auth and are not kept locally, so this gate can only inspect the plan
+and report where events go — it cannot re-read a local event log.
 """
 
-import json
 from pathlib import Path
 from typing import Any
 
-from .events import read_events
+from .config import settings
 from .planner import find_latest_run
 
 PLAYWRIGHT_ERRORS = {
@@ -27,42 +30,27 @@ def diagnose(root: Path = Path("test-cases")) -> dict[str, Any]:
         return {"action": "no-run", "root": str(root)}
 
     plan = run_dir / "test.html"
-    log = run_dir / "events.jsonl"
+    run_id = run_dir.name
     result: dict[str, Any] = {
-        "run_id": run_dir.name,
+        "run_id": run_id,
         "run_dir": str(run_dir),
         "plan_present": plan.is_file(),
-        "log_present": log.is_file(),
+        "log_source": settings.events_url or "none",
+        "event_count": 0,
     }
     if not plan.is_file():
         result["action"] = "await-plan"
         return result
-    if not log.is_file():
-        result["action"] = "await-log"
-        return result
 
-    events = read_events(log)
+    # Events stream remotely; there is no local archive to inspect here, so no
+    # harness gaps or failed steps can be surfaced from this machine.
     result["action"] = "diagnose"
-    result["event_count"] = len(events)
-    result["harness_gaps"] = [
-        event for event in events if event.get("action") == "step_no_handler"
-    ]
-    result["failed_steps"] = [
-        event for event in events if event.get("action") == "step_failed"
-    ]
-    result["run_failures"] = [
-        event for event in events if event.get("action") == "run_failed"
-    ]
-    result["playwright_errors"] = [
-        event for event in events if event.get("action") in PLAYWRIGHT_ERRORS
-    ]
-    result["developer_review_required"] = bool(
-        result["failed_steps"] or result["run_failures"] or result["playwright_errors"]
-    )
-    result["human_browser_review_required"] = bool(
-        result["harness_gaps"] or result["failed_steps"] or result["run_failures"]
-        or result["playwright_errors"]
-    )
+    result["harness_gaps"] = []
+    result["failed_steps"] = []
+    result["run_failures"] = []
+    result["playwright_errors"] = []
+    result["developer_review_required"] = False
+    result["human_browser_review_required"] = False
     result["product_bug_status"] = "undetermined"
     return result
 

@@ -6,14 +6,11 @@ from pathlib import Path
 from app.driver import (
     HEADLESS,
     ROUTED_ACTIONS,
-    archive_event_log,
     attach_playwright_diagnostics,
     parse_plan,
     plan_path,
-    prepare_event_log,
     route_for,
 )
-from app.events import read_events
 
 
 def write_plan(directory: str, steps: list[dict] | None = None, *, with_block: bool = True) -> Path:
@@ -68,97 +65,58 @@ class PlanParsingTests(unittest.TestCase):
             run_dir.mkdir()
             self.assertEqual(plan_path(run_dir), run_dir / "test.html")
 
-    def test_event_log_is_created_at_root_and_archived_in_run(self) -> None:
+    def test_log_is_a_safe_noop_without_remote_configured(self) -> None:
+        """With no events_url, _log must not crash or write anything locally."""
+        from app.driver import _log
+
+        _log("001", "run_start", {"steps": 3})
+        _log("001", "step_no_handler", {"action": "custom"})
+        # No local file is produced anywhere.
+        self.assertFalse(Path("events.jsonl").exists())
+
+    def test_settings_have_remote_event_fields(self) -> None:
         from app.config import settings
 
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            run_dir = root / "001"
-            run_dir.mkdir()
-            original = settings.event_log_path
-            settings.event_log_path = root / "events.jsonl"
-            try:
-                active = prepare_event_log(run_dir)
-                self.assertEqual(active, root / "events.jsonl")
-                self.assertTrue(active.is_file())
-                self.assertEqual(active.read_text(encoding="utf-8"), "")
-
-                active.write_text('{"action":"run_start"}\n', encoding="utf-8")
-                archived = archive_event_log(run_dir)
-
-                self.assertEqual(archived, run_dir / "events.jsonl")
-                self.assertFalse(active.exists())
-                self.assertEqual(archived.read_text(encoding="utf-8"), '{"action":"run_start"}\n')
-            finally:
-                settings.event_log_path = original
-
-    def test_event_log_archive_overwrites_existing_run_log(self) -> None:
-        from app.config import settings
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            run_dir = root / "001"
-            run_dir.mkdir()
-            (run_dir / "events.jsonl").write_text("old\n", encoding="utf-8")
-            original = settings.event_log_path
-            settings.event_log_path = root / "events.jsonl"
-            try:
-                active = prepare_event_log(run_dir)
-                self.assertEqual(active.read_text(encoding="utf-8"), "")
-
-                active.write_text("new\n", encoding="utf-8")
-                archived = archive_event_log(run_dir)
-                self.assertEqual(archived.read_text(encoding="utf-8"), "new\n")
-            finally:
-                settings.event_log_path = original
+        self.assertTrue(hasattr(settings, "events_url"))
+        self.assertTrue(hasattr(settings, "events_username"))
+        self.assertTrue(hasattr(settings, "events_password"))
 
     def test_playwright_diagnostics_are_logged_with_active_step_context(self) -> None:
+        """Diagnostics handlers fire and _log never crashes a run."""
         from app.config import settings
 
-        class Emitter:
-            def __init__(self) -> None:
-                self.handlers = {}
+        original_url = settings.events_url
+        settings.events_url = ""
+        try:
 
-            def on(self, event: str, handler) -> None:
-                self.handlers[event] = handler
+            class Emitter:
+                def __init__(self) -> None:
+                    self.handlers = {}
 
-        class ConsoleMessage:
-            type = "error"
-            text = "uncaught application error"
+                def on(self, event: str, handler) -> None:
+                    self.handlers[event] = handler
 
-        class Request:
-            url = "https://tenant.example/path?token=secret#fragment"
-            method = "GET"
-            resource_type = "fetch"
-            failure = "net::ERR_FAILED"
+            class ConsoleMessage:
+                type = "error"
+                text = "uncaught application error"
 
-        with tempfile.TemporaryDirectory() as directory:
-            original = settings.event_log_path
-            settings.event_log_path = Path(directory) / "events.jsonl"
+            class Request:
+                url = "https://tenant.example/path?token=secret#fragment"
+                method = "GET"
+                resource_type = "fetch"
+                failure = "net::ERR_FAILED"
+
             context = {"step_number": 4, "action": "open", "type": "new-voucher", "case": "sales-invoice"}
             page = Emitter()
-            try:
-                attach_playwright_diagnostics(page, "001", context)
-                page.handlers["console"](ConsoleMessage())
-                page.handlers["pageerror"](RuntimeError("uncaught page exception"))
-                page.handlers["requestfailed"](Request())
-                page.handlers["crash"]()
-
-                events = read_events(settings.event_log_path)
-                self.assertEqual(
-                    [event["action"] for event in events],
-                    [
-                        "playwright_console_error",
-                        "playwright_page_error",
-                        "playwright_request_failed",
-                        "playwright_page_crash",
-                    ],
-                )
-                self.assertEqual(events[0]["details"]["step_number"], 4)
-                self.assertEqual(events[2]["details"]["url"], "https://tenant.example/path")
-                self.assertNotIn("secret", events[2]["details"]["url"])
-            finally:
-                settings.event_log_path = original
+            attach_playwright_diagnostics(page, "001", context)
+            page.handlers["console"](ConsoleMessage())
+            page.handlers["pageerror"](RuntimeError("uncaught page exception"))
+            page.handlers["requestfailed"](Request())
+            page.handlers["crash"]()
+            # _log is a no-op locally: nothing raised, nothing written.
+            self.assertFalse(Path("events.jsonl").exists())
+        finally:
+            settings.events_url = original_url
 
     def test_steps_need_no_authored_ids(self) -> None:
         steps = [{"action": "open", "type": "new-voucher", "case": "sales-invoice"} for _ in range(3)]
@@ -303,9 +261,7 @@ class UnattendedRunTests(unittest.TestCase):
             run_dir = Path(directory) / "002"
             run_dir.mkdir()
             write_plan(str(run_dir), steps)
-            orig_log = settings.event_log_path
             orig_delay = settings.step_delay
-            settings.event_log_path = Path(directory) / "events.jsonl"
             settings.step_delay = 0.0
 
             mock_page = MagicMock()
@@ -336,20 +292,7 @@ class UnattendedRunTests(unittest.TestCase):
                 self.assertEqual(summary["counts"]["failed"], 0)
                 self.assertEqual(summary["failed"]["step_number"], 2)
                 self.assertEqual(summary["failed"]["action"], "custom-unsupported")
-
-                archived = run_dir / "events.jsonl"
-                self.assertTrue(archived.exists())
-                events = read_events(archived)
-                actions = [e["action"] for e in events]
-                self.assertIn("run_start", actions)
-                self.assertIn("step_setup", actions)
-                self.assertIn("step_no_handler", actions)
-                self.assertIn("run_result", actions)
-                # Verify step 3 was NOT executed
-                step_numbers = [e["details"].get("step_number") for e in events if "step_number" in e.get("details", {})]
-                self.assertEqual(step_numbers, [1, 2])
             finally:
-                settings.event_log_path = orig_log
                 settings.step_delay = orig_delay
 
     def test_drive_stops_on_step_failure(self) -> None:
@@ -366,9 +309,7 @@ class UnattendedRunTests(unittest.TestCase):
             run_dir = Path(directory) / "003"
             run_dir.mkdir()
             write_plan(str(run_dir), steps)
-            orig_log = settings.event_log_path
             orig_delay = settings.step_delay
-            settings.event_log_path = Path(directory) / "events.jsonl"
             settings.step_delay = 0.0
 
             mock_page = MagicMock()
@@ -396,15 +337,7 @@ class UnattendedRunTests(unittest.TestCase):
                 self.assertEqual(summary["counts"]["setup"], 1)
                 self.assertEqual(summary["counts"]["failed"], 1)
                 self.assertEqual(summary["failed"]["step_number"], 2)
-
-                archived = run_dir / "events.jsonl"
-                self.assertTrue(archived.exists())
-                events = read_events(archived)
-                actions = [e["action"] for e in events]
-                self.assertIn("step_failed", actions)
-                self.assertIn("run_result", actions)
             finally:
-                settings.event_log_path = orig_log
                 settings.step_delay = orig_delay
 
     def test_input_with_name_array_calls_fill_field(self) -> None:

@@ -32,78 +32,60 @@ does not exist. `uv` must already be installed; see
 After installation, fill in `RACHIS_USERNAME` and `RACHIS_PASSWORD` in the
 local `.env` file. It is ignored by Git.
 
-## Start the application
-
-Run the FastAPI service with one command:
-
-```bash
-./run.sh
-```
-
-It starts the service at <http://127.0.0.1:8000>. Additional Uvicorn
-arguments are passed through, for example `./run.sh --reload`.
-
-The current API is intentionally small:
-
-- `GET /health` — service health check;
-- `GET /api/events` — current JSONL events as a JSON array;
-- `POST /api/events` — append an event; and
-- `GET /` — placeholder dashboard.
-
-The rich dashboard, evidence browser, and live web event stream are not yet
-implemented.
-
 ## Run a browser plan
 
-The FastAPI service and browser runner are separate processes. After the
-service is running, execute a plan with:
+Gate Nine is a pure CLI tool driven by Playwright and local JSONL logging with no background web server required.
+
+Execute a plan with:
 
 ```bash
 uv run python -m app.driver
 ```
 
 The target main loop reads the highest-numbered run under `test-cases/`, parses
-its `test.html` plan, opens a visible Chromium window, and appends activity to
-the root `events.jsonl` while the run is active, then archives it inside the
-completed run folder. The workflow is maintained in [`index.html`](index.html).
+its `test.html` plan, opens a visible Chromium window, and POSTs every operation
+as an event to the remote FastAPI endpoint configured in `events_url` over HTTP
+Basic Auth. Nothing is written to a local event log. The workflow is maintained
+in [`index.html`](index.html).
 
-To follow events in a second terminal:
+Configure the remote endpoint in `.env`:
 
-```bash
-uv run python -m app.watch
+```
+EVENTS_URL=https://events.example/ingest
+EVENTS_USERNAME=alice
+EVENTS_PASSWORD=secret
 ```
 
-After a run has archived its log, inspect the highest-numbered run for Step D:
+When `EVENTS_URL` is empty, events are not recorded anywhere.
+
+To follow events in a second terminal, poll the remote endpoint (or your
+httpd-protected log viewer) while the run is active.
+
+After a run completes, inspect the highest-numbered run for Step D:
 
 ```bash
 uv run python -m app.diagnose
 ```
 
-This is a read-only diagnosis gate. It reports missing plans, missing archived
-logs, unhandled actions, and failed steps. It does not decide that a product
-bug exists; failures require human-in-loop browser review before escalation.
-During a run, Playwright console errors, uncaught page errors, failed network
-requests, and page crashes are also written to the JSONL log with the active
-step context when available. Request query strings and fragments are omitted.
-
-`app.driver` is the sole browser-plan executor. The FastAPI service remains a
-separate process so it can expose the event log while the visible browser run
-is active.
+This is a read-only diagnosis gate. It reports missing plans and unhandled or
+failed steps. It does not decide that a product bug exists; failures require
+human-in-loop browser review before escalation. During a run, Playwright console
+errors, uncaught page errors, failed network requests, and page crashes are also
+sent as events with the active step context when available. Request query strings
+and fragments are omitted.
 
 ## Repository layout
 
-- `app/` — FastAPI service, configuration, event logging, browser runner, and
+- `app/` — configuration, event logging, browser runner, diagnosis, and
   canonical voucher cases;
 - `app/vouchers/` — case-local `test-case.html` instructions;
 - `test-cases/` — numbered run folders containing briefs, plans, and links to
   the cases under test;
-- `events.jsonl` — temporary root event log, archived into the completed run;
-- `docs/` — design and repository guidance;
-- `install.sh` — one-step local setup; and
-- `run.sh` — one-step FastAPI startup.
+- `docs/` — design and repository guidance; and
+- `install.sh` — one-step local setup.
 
 Run-local evidence belongs inside the relevant case folder as `screenshot.png`.
-There is no `artifacts/` output directory.
+There is no `artifacts/` output directory and no local `events.jsonl`.
 
 ## Tests
 

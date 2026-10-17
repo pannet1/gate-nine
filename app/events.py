@@ -1,23 +1,60 @@
+"""Send run events to a remote FastAPI endpoint over HTTP Basic Auth.
+
+No local JSONL log is kept. Every event is POSTed to ``events_url`` with the
+configured httpd username/password. A logging failure never crashes a run — it
+is reported to stderr and the run continues.
+"""
+
+import base64
 import json
+import sys
+import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 
-def append_event(path: Path, *, action: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
+def send_event(
+    url: str,
+    username: str,
+    password: str,
+    *,
+    test_id: str,
+    action: str,
+    details: dict[str, Any] | None = None,
+    retries: int = 2,
+) -> bool:
+    """POST one event to the remote endpoint over HTTP Basic Auth.
+
+    Returns True when the remote accepted the event (HTTP 2xx). Never raises —
+    a logging failure must not kill a browser run.
+    """
     event = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "test_id": test_id,
         "action": action,
         "details": details or {},
     }
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as stream:
-        stream.write(json.dumps(event, ensure_ascii=False) + "\n")
-    return event
-
-
-def read_events(path: Path) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-
+    payload = json.dumps(event, ensure_ascii=False).encode("utf-8")
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Basic {token}",
+    }
+    last_error: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            request = urllib.request.Request(
+                url, data=payload, headers=headers, method="POST"
+            )
+            with urllib.request.urlopen(request, timeout=10) as response:
+                return 200 <= response.status < 300
+        except (urllib.error.URLError, OSError) as exc:  # noqa: BLE001 - network
+            last_error = exc
+            time.sleep(0.5 * (attempt + 1))
+    print(
+        f"[events] could not send {action} for {test_id} to {url}: {last_error}",
+        file=sys.stderr,
+    )
+    return False

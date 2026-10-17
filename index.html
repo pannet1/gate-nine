@@ -85,7 +85,6 @@ highest-numbered folder that already exists.</p>
 └── 001/                    # run_id — created by a human
     ├── &lt;any-name&gt;.md       # brief from Murugan — name is free, only .md matters
     ├── test.html           # the ordered plan — which case runs when, nothing else
-    ├── events.jsonl        # archived run log (moved from root after run completes)
     ├── voucher.png         # current evidence screenshot
     ├── login           -&gt;  ../../app/vouchers/login
     ├── sales-invoice   -&gt;  ../../app/vouchers/sales-invoice
@@ -143,7 +142,7 @@ what the loop looks for.</p>
             <td>Visible unattended execution</td>
             <td>Playwright Driver</td>
             <td>Visible Chromium (<code>HEADLESS = False</code>) + Playwright verbs</td>
-            <td><code>events.jsonl</code> &rarr; <code>test-cases/&lt;run_id&gt;/events.jsonl</code></td>
+            <td>Events streamed to <code>events_url</code> over HTTP Basic Auth (no local log)</td>
         </tr>
         <tr>
             <td><strong>Step D</strong></td>
@@ -210,18 +209,16 @@ what the loop looks for.</p>
     <p>The main runner (<code>app.driver</code>) executes the generated plan in a visible Chromium browser (<code>HEADLESS = False</code>):</p>
     <ul>
         <li>Reads ordered steps from the machine-readable plan inside <code>test.html</code>.</li>
-        <li>Empties the temporary root <code>events.jsonl</code> before execution.</li>
+        <li>POSTs every operation as an event to <code>events_url</code> over HTTP Basic Auth (nothing is written to a local log).</li>
         <li>Drives forms using standard Playwright verbs: <code>open</code>, <code>input</code> (supporting regular fields and <code>name</code> arrays like <code>["item", "qty"]</code> for line items), <code>click</code>, <code>verify</code>, and <code>screenshot</code>.</li>
         <li>Between actions, holds for <code>STEP_DELAY</code> (3 seconds) for human observation.</li>
-        <li>On completion, crash, or interruption, archives the root log into <code>test-cases/&lt;run_id&gt;/events.jsonl</code> (cleanly overwriting any prior log).</li>
     </ul>
-    <pre>events.jsonl                  # active root log during run
-test-cases/001/events.jsonl   # archived after run completes</pre>
+    <p class="note">Configure the remote endpoint in <code>.env</code>: <code>EVENTS_URL</code>, <code>EVENTS_USERNAME</code>, <code>EVENTS_PASSWORD</code>. When <code>EVENTS_URL</code> is empty, events are not recorded.</p>
 </fieldset>
 
 <fieldset>
     <legend><strong>Step D — AI Diagnoses the Completed Run</strong></legend>
-    <p>When the run ends and both <code>test.html</code> and <code>events.jsonl</code> exist in the run folder, <code>app.diagnose</code> inspects the outcome:</p>
+    <p>When the run ends and <code>test.html</code> exists in the run folder, <code>app.diagnose</code> inspects the outcome against the events streamed to the remote endpoint:</p>
     <ul>
         <li>Surfaces Playwright runtime diagnostics (console errors, uncaught exceptions, network failures, page crashes).</li>
         <li>Verifies zero harness gaps (<code>step_no_handler</code>) in production runs.</li>
@@ -276,13 +273,10 @@ prompts, and nothing waits for a keystroke.</p>
         <code>incomplete</code>. Merely opening a form is not counted as completing its test.</li>
     <li>A step that genuinely fails stops the run there, per the Run Lifecycle (§7). The browser closes and
         the terminal returns.</li>
-    <li>Every step's outcome is written to the append-only JSONL event log. A summary is
+    <li>Every step's outcome is POSTed as an event to <code>events_url</code> over HTTP Basic Auth. A summary is
         printed when the run ends.</li>
-    <li><code>uv run python -m app.watch</code> tails the root <code>events.jsonl</code> to a
-        second terminal, so the run can be followed without looking at the browser.</li>
     <li><code>uv run python -m app.diagnose</code> inspects the completed run folder for Step D,
-        verifying that <code>test.html</code> and <code>events.jsonl</code> are present, surfacing
-        unhandled actions, failed steps, and Playwright error diagnostics before human-in-the-loop review.</li>
+        surfacing unhandled actions, failed steps, and Playwright error diagnostics before human-in-the-loop review.</li>
 </ol>
 <p class="note">No <code>.md</code> file in the run folder means the loop does not
 proceed. It does not guess and does not fall back to any other source.</p>
@@ -313,41 +307,34 @@ proceed. It does not guess and does not fall back to any other source.</p>
     <code>run_id</code> (<code>002</code>, <code>003</code>, …) with the corrected brief or harness.</p>
 </details>
 
-<h2>8. Logging &amp; two-phase log lifecycle</h2>
-<p>Logging follows a strict two-phase lifecycle separating active execution from permanent archive:</p>
-<ol>
-    <li><strong>Active Run Log (<code>events.jsonl</code> at root):</strong> Emptied before execution begins. Every operation is appended here in real time. Developers and testers tail live progress in a secondary terminal via <code>uv run python -m app.watch</code>.</li>
-    <li><strong>Archived Run Log (<code>test-cases/&lt;run_id&gt;/events.jsonl</code>):</strong> Upon run completion, crash, or interrupt cleanup, the root file is moved into the run folder, cleanly overwriting any prior log from previous attempts.</li>
-</ol>
-
+<h2>8. Logging &amp; remote event streaming</h2>
+<p>Every operation is POSTed as an event to the remote FastAPI endpoint configured in
+<code>events_url</code> over HTTP Basic Auth. No local event log is kept.</p>
 <p>Every operation is logged as <code>operation &lt;name:value&gt; &lt;form name&gt;</code>:</p>
 <pre>input product:hamam voucher
 create screenshot voucher
 save screenshot voucher
 delete screenshot voucher
 click home delivery note</pre>
-<p>Logs are append-only JSONL and carry action, dynamic step number, safe details, and
-timestamp. The run folder is the run identity; no separate test ID is recorded. Each step logs one <code>step_setup</code>,
-<code>step_ok</code>, <code>step_no_handler</code>, or <code>step_failed</code> event; a run ends with a
-<code>run_result</code> event carrying counts and final status (<code>passed</code>, <code>incomplete</code>, or <code>failed</code>).
-During the run, Playwright diagnostics (<code>playwright_console_error</code>, <code>playwright_page_error</code>,
-<code>playwright_request_failed</code>, <code>playwright_page_crash</code>) are recorded with active step context.
-The team wants a live relay of the current operation so Murugan and Jashveer see real-time progress.</p>
+<p>Logs carry action, dynamic step number, safe details, and timestamp. Each step logs one
+<code>step_setup</code>, <code>step_ok</code>, <code>step_no_handler</code>, or
+<code>step_failed</code> event; a run ends with a <code>run_result</code> event carrying counts
+and final status (<code>passed</code>, <code>incomplete</code>, or <code>failed</code>).
+During the run, Playwright diagnostics (<code>playwright_console_error</code>,
+<code>playwright_page_error</code>, <code>playwright_request_failed</code>,
+<code>playwright_page_crash</code>) are recorded with active step context. Request query
+strings and fragments are omitted. The team wants a live relay of the current operation
+so Murugan and Jashveer see real-time progress.</p>
 
 <h2>9. Infra</h2>
 <ul>
-    <li>Remote terminal-only compute for the developers to watch the live log.</li>
-    <li>A web server alongside the log, presenting the run's files in a rich HTML
-        interface — screenshot, brief, and test plan together.</li>
-    <li>Local harness: FastAPI service (<code>app/</code>) with <code>/health</code>,
-        <code>/api/events</code>, and a dashboard at <code>http://127.0.0.1:8000</code>.</li>
-    <li><code>app.driver</code> is the sole browser runner and remains separate from
-        the FastAPI dashboard so voucher-specific behaviour does not mix into the API.</li>
+    <li>Pure CLI: Browser execution, event logging, and diagnostics operate via local Python CLI commands. Events are streamed to <code>events_url</code> over HTTP Basic Auth; nothing is written to a local log.</li>
+    <li>Remote terminal-only compute for the developers to watch the live event stream via the remote endpoint (or any httpd-protected log viewer).</li>
+    <li><code>app.driver</code> is the sole browser runner executing the plan in visible Chromium and POSTing events remotely.</li>
     <li><code>app.diagnose</code> is the read-only post-run diagnosis gate (Step D) that inspects the latest
         run folder and surfaces harness gaps or browser errors, keeping product-bug classification undetermined
         until human browser review.</li>
-    <li>Runtime data is gitignored: <code>.env</code>, <code>data/</code>, and
-        every run-local screenshot. Evidence may quote tenant data, so it is never
+    <li>Runtime data is gitignored: <code>.env</code> and every run-local screenshot. Evidence may quote tenant data, so it is never
         committed.</li>
 </ul>
 

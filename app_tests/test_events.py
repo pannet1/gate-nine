@@ -1,22 +1,67 @@
-import tempfile
+import json
 import unittest
-from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-from app.events import append_event, read_events
+from app.events import send_event
 
 
-class EventLogTests(unittest.TestCase):
-    def test_events_are_append_only_jsonl(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "events.jsonl"
-            append_event(path, action="open_url", details={"url": "https://example.test"})
-            append_event(path, action="capture_screenshot")
+class EventSendTests(unittest.TestCase):
+    def test_send_event_posts_json_with_basic_auth(self) -> None:
+        captured: dict = {}
 
-            self.assertEqual(len(read_events(path)), 2)
-            self.assertEqual(read_events(path)[0]["action"], "open_url")
-            self.assertNotIn("test_id", read_events(path)[0])
+        class FakeResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b"{}"
+
+        def fake_open(request, timeout=None):
+            captured["method"] = request.method
+            captured["url"] = request.full_url
+            captured["headers"] = dict(request.header_items())
+            captured["body"] = json.loads(request.data)
+            return FakeResponse()
+
+        with patch("app.events.urllib.request.urlopen", side_effect=fake_open):
+            ok = send_event(
+                "https://events.example/ingest",
+                "alice",
+                "secret",
+                test_id="001",
+                action="sign_in",
+                details={"user": "alice"},
+            )
+
+        self.assertTrue(ok)
+        self.assertEqual(captured["method"], "POST")
+        self.assertEqual(captured["url"], "https://events.example/ingest")
+        self.assertEqual(captured["body"]["test_id"], "001")
+        self.assertEqual(captured["body"]["action"], "sign_in")
+        self.assertEqual(captured["body"]["details"], {"user": "alice"})
+        self.assertTrue(captured["body"]["timestamp"])
+        self.assertIn("Authorization", captured["headers"])
+        self.assertTrue(captured["headers"]["Authorization"].startswith("Basic "))
+
+    def test_send_event_returns_false_when_unreachable(self) -> None:
+        with patch(
+            "app.events.urllib.request.urlopen", side_effect=OSError("down")
+        ):
+            self.assertFalse(
+                send_event(
+                    "https://down.example/ingest",
+                    "alice",
+                    "secret",
+                    test_id="1",
+                    action="x",
+                )
+            )
 
 
 if __name__ == "__main__":
     unittest.main()
-
