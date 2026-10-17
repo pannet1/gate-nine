@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     headless: bool = False
     artifacts_dir: Path = Path("artifacts")
     event_log_path: Path = Path("data/events.jsonl")
+    # Seconds the visible browser holds after each step, so eyes can keep up
+    # with what was just entered. The run is unattended; this is its only pause.
+    step_delay: float = 3.0
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

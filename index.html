@@ -60,7 +60,9 @@ to one.</p>
 │   └── test-case.html
 ├── goods-receipt/
 │   └── test-case.html
-└── credit-note/
+├── credit-note/
+│   └── test-case.html
+└── debit-note/
     └── test-case.html</pre>
 <p><strong>Login is a case, not a voucher.</strong> It holds no voucher type and appears in no
 voucher phase — it is the door every other case walks through, so it lives here for the same
@@ -77,9 +79,10 @@ highest-numbered folder that already exists.</p>
     ├── sales-invoice   -&gt;  ../../app/vouchers/sales-invoice
     ├── purchase-bill   -&gt;  ../../app/vouchers/purchase-bill
     ├── goods-receipt   -&gt;  ../../app/vouchers/goods-receipt
-    └── credit-note     -&gt;  ../../app/vouchers/credit-note</pre>
-<p>The depth is <code>../../</code>, not <code>../../../</code> — two levels up from the run
-folder reaches the project root.</p>
+    ├── credit-note     -&gt;  ../../app/vouchers/credit-note
+    └── debit-note      -&gt;  ../../app/vouchers/debit-note</pre>
+<p>Each symlink is <code>../../</code> — two levels up from the run folder reaches the
+project root.</p>
 <p><strong>The plan carries the order; the case folder carries the method.</strong>
 <code>test.html</code> says which case runs when — step, test number, action, and the folder
 that owns it. It states no steps, no checks, and no expected results, because those belong to
@@ -93,11 +96,11 @@ earlier run pointed at — accepted, because history is carried by the run's evi
 the document. Dead versions are not wanted.</p>
 <p>The brief's filename is free — <code>notes.MD</code>, <code>header-fields.md</code>,
 whatever its author chose. Only the <code>.md</code> extension matters, because that is
-what the loop looks for. The artefacts below <code>test-case.html</code> are written as
-the run executes.</p>
+what the loop looks for.</p>
 
 <h2>4. Main loop</h2>
-<p><strong>Playwright drives; the human intervenes.</strong> Both, not one or the other.</p>
+<p><strong>Playwright drives; the human watches.</strong> The run is unattended — nothing
+prompts, and nothing waits for a keystroke.</p>
 <ol>
     <li>Find the latest <code>run_id</code> — the highest-numbered folder under
         <code>test-cases/</code>.</li>
@@ -109,20 +112,21 @@ the run executes.</p>
     <li>Read the machine-readable plan block inside <code>test.html</code> and execute its
         steps in order. The prose tables in that file are for humans; the JSON block drives
         code.</li>
-    <li>Between steps, the human chooses:
-        <strong>Enter</strong> continue · <strong>p</strong> pause and take the browser ·
-        <strong>r</strong> restart the flow from step 1 · <strong>q</strong> quit.</li>
-    <li>An action with no handler stops and hands the window over. That is an intervention
-        point, not a failure — the human fixes it, then chooses again.</li>
-    <li><strong>Pause is the one exception that keeps the window.</strong> Finishing
-        the plan, or quitting, closes the browser and returns the terminal. Pressing
-        <strong>p</strong> leaves it open so you can drive it by hand — that is the
-        whole point of pausing.</li>
+    <li>Between steps the runner holds for a fixed delay — <code>step_delay</code>, default
+        3 seconds, set by <code>STEP_DELAY</code> — so human eyes can follow what was just
+        entered before the next action fires.</li>
+    <li>A step whose action has no handler is recorded as such and the run continues past it.
+        That is a gap in the harness, not a failure of the product.</li>
+    <li>A step that genuinely fails stops the run there, per §5. The browser closes and
+        the terminal returns.</li>
+    <li>Every step's outcome is written to <code>artifacts/&lt;run_id&gt;-result.txt</code>,
+        rewritten in full after each step so a run that dies mid-flight still leaves a
+        record ending where it did. A summary is printed when the run ends.</li>
+    <li><code>uv run python -m app.watch</code> tails <code>data/events.jsonl</code> to a
+        second terminal, so the run can be followed without looking at the browser.</li>
 </ol>
 <p class="note">No <code>.md</code> file in the run folder means the loop does not
 proceed. It does not guess and does not fall back to any other source.</p>
-<p>Commands are logged as ordinary events, so a restart or a manual pause is visible in the
-live relay alongside everything Playwright did.</p>
 
 <h2>5. Lifecycle</h2>
 <p>Per case: <code>draft → ai-prepared → human-approved → running → passed | failed</code></p>
@@ -138,9 +142,11 @@ create screenshot voucher
 save screenshot voucher
 delete screenshot voucher
 click home delivery note</pre>
-<p>Logs are append-only JSONL and carry test ID, action, safe details, and timestamp.
-The team wants a live relay of the current operation so Murugan and Jashveer see
-real-time progress.</p>
+<p>Logs are append-only JSONL — <code>data/events.jsonl</code> — and carry test ID, action,
+safe details, and timestamp. Each step logs one <code>step_ok</code>,
+<code>step_no_handler</code>, or <code>step_failed</code> event; a run ends with a
+<code>run_result</code> event naming the result file and its counts. The team wants a live
+relay of the current operation so Murugan and Jashveer see real-time progress.</p>
 
 <h2>7. Infra</h2>
 <ul>
@@ -151,6 +157,9 @@ real-time progress.</p>
         <code>/api/events</code>, and a dashboard at <code>http://127.0.0.1:8000</code>.</li>
     <li>Browser runner is kept separate so voucher-specific behaviour can be added
         without mixing into the dashboard.</li>
+    <li>Runtime data is gitignored: <code>.env</code>, <code>data/</code>,
+        <code>artifacts/</code>, and every screenshot. A result quotes tenant data, so
+        it is never committed.</li>
 </ul>
 
 <h2>8. Safety</h2>
@@ -159,19 +168,21 @@ real-time progress.</p>
     <li>The runner may open and inspect the tenant but must not create or post a voucher
         unless a human approved that specific case and its test data.</li>
     <li>A human owns the final PASS/FAIL — an AI model never marks a run as passed.</li>
-    <li>The loop writes <code>test.html</code>, <code>result.md</code>, and the evidence
+    <li>The loop writes <code>test.html</code>, the run's result file, and the evidence
         files. The human writes the brief and the approval.</li>
 </ul>
 
 <h2>9. Open items</h2>
 <ul>
-    <li><strong>Voucher handlers.</strong> <code>app/driver.py</code> handles
-        <code>open-new</code>. The other seven plan actions — <code>add-line</code>,
-        <code>set-line-discount</code>, <code>set-header-discount</code>,
+    <li><strong>Voucher handlers.</strong> <code>app/driver.py</code> completes
+        <code>sign-in</code> and <code>open-new</code>. The other seven plan actions —
+        <code>add-line</code>, <code>set-line-discount</code>, <code>set-header-discount</code>,
         <code>reject-header-discount</code>, <code>verify-tax</code>,
         <code>draft-post-correct</code>, <code>print</code> — have no handler yet, so each
-        stops and hands the window to the human. That is intended, but it is what stands
-        between now and a fully driven run.</li>
+        is recorded as <code>no-handler</code> and the run moves on. Opening a voucher is not
+        printing it or posting a correction, so those steps must never be reported as done
+        on the strength of a form appearing. Writing these seven is what stands between now
+        and a fully driven run.</li>
     <li><strong>Live tenant routes.</strong> The five vouchers in the plan are
         confirmed against the live tenant (2026-10-17) and open by route rather
         than by hunting for a control: Sales Invoice → <code>/accounting/sales-invoices/new/</code>,
@@ -183,72 +194,6 @@ real-time progress.</p>
         to <code>/ar</code>, which 404s, and <code>/accounting/invoices/</code> does
         not exist either.</li>
 </ul>
-
-<h2>10. Progress log</h2>
-<table>
-    <tr><th>Date</th><th>Change</th><th>By</th></tr>
-    <tr><td>2026-10-17</td><td>This reference page created; the test-case folder layout
-        confirmed.</td><td>Karthick</td></tr>
-    <tr><td>2026-10-17</td><td>Removed <code>test-cases/README.md</code>. Its
-        <code>YYYY-MM-DD-voucher-type-short-slug</code> scheme was superseded by the numbered-run
-        layout in use.</td><td>Karthick</td></tr>
-    <tr><td>2026-10-17</td><td>Reframed <code>001</code> as a <strong>run_id</strong> created by a
-        human. The loop processes the latest run and stops dead on the first failure; it finishes
-        only when every case has passed. A failed run is not resumed.</td><td>Karthick</td></tr>
-    <tr><td>2026-10-17</td><td>Reduced this page to control flow only. It no longer states what to
-        test or how — the test-case format skeleton and the run-001 coverage table were removed;
-        those live in the brief and the generated <code>test.html</code>. §4 Main loop restated:
-        discover Murugesan's <code>.md</code>, proceed with <code>test.html</code>, and create it
-        only when absent.</td><td>Karthick</td></tr>
-    <tr><td>2026-10-17</td><td><strong>§1 Aim rewritten.</strong> The goal is to
-        <em>see the browser entering data</em> — Rachis arrives already tested around 1000
-        times, so bug hunting is not this harness's job. Vision is the job, per
-        <code>docs/DESIGN.md</code>. Consequence recorded: never headless.</td><td>Karthick</td></tr>
-    <tr><td>2026-10-17</td><td><strong>§4 rewritten as "Playwright drives, human
-        intervenes."</strong> Added <code>app/driver.py</code>: reads a machine-readable JSON
-        plan block embedded in <code>test.html</code>, opens visible Chromium, and offers
-        continue / pause / restart / quit between steps. An unhandled action is an
-        intervention point, not a failure. Chromium 1248 installed to unblock Playwright.</td><td>Karthick</td></tr>
-    <tr><td>2026-10-17</td><td><strong>Logged in and mapped the tenant's voucher routes.</strong>
-        <code>open-new</code> switched from label-hunting to direct navigation after the
-        first live run handed the window back at step 1 — no new-voucher control was on
-        the page. All five plan vouchers now resolve to a confirmed <code>…/new/</code>
-        route; <code>GRN</code> maps to the route the tenant headings as
-        <em>Goods Receipt</em>. Login is driven from <code>.env</code>. Recorded dead
-        links: <code>/ar</code> and <code>/accounting/invoices/</code> both 404.</td><td>Karthick</td></tr>
-    <tr><td>2026-10-17</td><td><strong>Sign-in automated; .env parse warnings fixed; browser
-        now closes itself.</strong> <code>_fill_login</code> filled the login boxes and
-        never submitted, so every run stalled at step 1 and looked like it needed a human
-        to type credentials <code>.env</code> already holds — replaced by
-        <code>_sign_in</code>, which submits and waits for the URL to leave
-        <code>/login</code>. <code>.env</code> converted to standard
-        <code>KEY=value</code>, retiring the manual parser in <code>config.py</code> that
-        existed only to tolerate the legacy form. On the end-of-run browser: the plan
-        finishing or quitting now closes it and returns the terminal; <strong>pause</strong>
-        remains the one case that keeps the window, since driving it by hand is the point
-        of pausing.</td><td>Karthick</td></tr>
-    <tr><td>2026-10-17</td><td><strong>Login made a canonical case.</strong> It is not a
-        voucher, but every <code>test.html</code> opens with it, so it moved to
-        <code>app/vouchers/login/test-case.html</code> and is symlinked into
-        <code>001/</code> like the four vouchers — the gate now discovers five case
-        folders. Written against the live form: POST to <code>/login/?qaction=…</code>,
-        fields <code>email</code> and <code>password</code>, success landing on
-        <code>/dashboard/</code>. The deliberately-wrong-password case is documented but
-        not run, because the tenant footer says sign-in events are audited. Corrected
-        §3's symlink depth, which still read <code>../../../</code> from before that fix.</td><td>Karthick</td></tr>
-    <tr><td>2026-10-17</td><td><strong>Split the plan from the method.</strong>
-        <code>test.html</code> had carried the how-to in three places — a <em>Check</em>
-        column in every phase table, a <code>check</code> field in each JSON step, and the
-        prose around them. All of it moved out; the plan now states step, test, action and
-        case folder, and nothing else. §3 records the rule: the plan carries the order, the
-        case folder carries the method. Driver reads <code>case</code> rather than a
-        voucher name, so the folder is the single source for routing. A test now fails if a
-        step grows a method field again. <strong>Login also stopped lying:</strong> the base
-        URL serves the marketing site, so <code>_sign_in</code> returned "already inside"
-        on the landing page and step 1 was always bounced back to <code>/login</code>. It
-        now navigates to <code>/login/</code> explicitly. The pre-loop bootstrap is gone —
-        one POST per run, confirmed in the event log, landing on <code>/dashboard/</code>.</td><td>Karthick</td></tr>
-</table>
 
 </body>
 </html>

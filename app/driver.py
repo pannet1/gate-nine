@@ -1,24 +1,28 @@
-"""Drive a run's test.html in a visible browser, with a human able to take over.
+"""Drive a run's test.html in a visible browser, unattended.
 
-Playwright executes the plan; the human watches and intervenes where needed.
-The browser is never headless — seeing fields get entered is the point of the
-project (index.html §1).
+Playwright executes the plan start to finish. Nothing waits for input: each
+step runs, the window holds for a fixed pause so human eyes can follow what was
+entered, and the next step fires. The browser is never headless — seeing fields
+get entered is the point of the project (index.html §1).
 
-Commands between steps:
-    Enter   continue to the next step
-    p       pause — stop driving, leave the browser open for manual work
-    r       restart the flow from step 1
-    q       quit
+Each step's outcome is appended to a text result under artifacts/, so a run
+leaves a readable record of what it did and where it stopped.
 
-An action with no handler is not a failure: it is an intervention point. The
-driver stops, says what it could not do, and hands the window to the human.
+How a step is classified:
+    ok          the action ran.
+    no-handler  this harness has no driver for the action yet — a gap in the
+                tool, not a failure of the product. Recorded, then the run
+                continues past it.
+    failed      the action was attempted and did not succeed. The run stops
+                here: continuing from a broken state only produces noise.
 """
 
 import asyncio
 import json
 import re
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from playwright.async_api import async_playwright
 
@@ -43,6 +47,18 @@ VOUCHER_ROUTES = {
     "credit note": "/accounting/credit-notes/new/",
     "debit note": "/accounting/debit-notes/new/",
 }
+
+# Actions the harness actually completes. Everything else opens a voucher at
+# most, which is not the action asked for and must not be reported as done —
+# opening a form is not printing it, and it is not posting a correction.
+ROUTED_ACTIONS = {"open-new"}
+
+
+class Outcome(NamedTuple):
+    """What became of one step."""
+
+    status: str  # "ok" | "no-handler" | "failed"
+    detail: str = ""
 
 
 def _normalise(case: str) -> str:
@@ -79,6 +95,14 @@ def plan_path(run_dir: Path) -> Path:
     return run_dir / "test.html"
 
 
+def result_path(run_id: str) -> Path:
+    """Where a run's text result is written.
+
+    Under artifacts/, which is gitignored — a result quotes tenant data.
+    """
+    return settings.artifacts_dir / f"{run_id}-result.txt"
+
+
 def announce(step: dict[str, Any], index: int, total: int) -> None:
     """Name the step and point at its case folder — never restate the method.
 
@@ -90,21 +114,91 @@ def announce(step: dict[str, Any], index: int, total: int) -> None:
     print(f"    method:  app/vouchers/{case}/test-case.html")
 
 
-async def prompt() -> str:
-    """Ask the human what to do next, without blocking the event loop."""
-    line = await asyncio.to_thread(input, "\n  [Enter]=next  p=pause  r=restart  q=quit > ")
-    return line.strip().lower()
+def render_result(
+    plan_file: Path,
+    steps: list[dict[str, Any]],
+    seen: list[tuple[dict[str, Any], Outcome]],
+    summary: dict[str, Any],
+) -> str:
+    """The whole text result, as one document.
+
+    Rewritten in full after every step rather than appended to, so a run that
+    dies mid-flight still leaves a coherent record ending at the last step it
+    reached.
+    """
+    outcomes = {step["id"]: outcome for step, outcome in seen}
+    total = len(steps)
+
+    lines = [
+        f"run {summary['run_id']}",
+        f"plan  {plan_file}",
+        f"steps {total}",
+        f"started {summary['started']}",
+        "",
+        f"{'pos':<7}{'step':<9}{'action':<24}{'case':<18}result",
+        "-" * 78,
+    ]
+    for position, step in enumerate(steps, start=1):
+        outcome = outcomes.get(step["id"])
+        if outcome is None:
+            mark = "not reached"
+        elif outcome.detail:
+            mark = f"{outcome.status} — {outcome.detail}"
+        else:
+            mark = outcome.status
+        lines.append(
+            f"{position}/{total:<6}"
+            f"step {step['id']:<5}"
+            f"{step.get('action', ''):<24}"
+            f"{step.get('case', ''):<18}"
+            f"{mark}"
+        )
+
+    counts = summary["counts"]
+    lines.append("-" * 78)
+    if summary["failed"]:
+        lines.append(
+            f"stopped at step {summary['failed']['step']} — {summary['failed']['detail']}"
+        )
+    elif total:
+        lines.append("finished every step")
+    else:
+        lines.append("no steps in the plan")
+    lines.append(
+        f"{counts['ok']} ok · {counts['no-handler']} no handler · {counts['failed']} failed"
+    )
+    return "\n".join(lines) + "\n"
+
+
+def write_result(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
 
 
 async def drive(run_dir: Path) -> dict[str, Any]:
-    """Run the plan in a visible browser until finished, paused, or quit."""
+    """Run the whole plan in a visible browser, unattended."""
     plan = parse_plan(plan_path(run_dir))
     steps: list[dict[str, Any]] = plan.get("steps", [])
     run_id = plan.get("run_id", run_dir.name)
-    summary: dict[str, Any] = {"run_id": run_id, "total": len(steps), "completed": [], "stopped": None}
+    outcome_file = result_path(run_id)
+
+    summary: dict[str, Any] = {
+        "run_id": run_id,
+        "total": len(steps),
+        "started": datetime.now().isoformat(timespec="seconds"),
+        "counts": {"ok": 0, "no-handler": 0, "failed": 0},
+        "failed": None,
+        "result_file": str(outcome_file),
+    }
+    seen: list[tuple[dict[str, Any], Outcome]] = []
+
+    # Written before the browser opens, so even a launch that never comes back
+    # leaves a result saying the run started.
+    write_result(outcome_file, render_result(plan_path(run_dir), steps, seen, summary))
 
     if not steps:
-        summary["stopped"] = "empty-plan"
+        summary["failed"] = {"step": None, "detail": "empty-plan"}
+        write_result(outcome_file, render_result(plan_path(run_dir), steps, seen, summary))
         return summary
 
     settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -114,58 +208,54 @@ async def drive(run_dir: Path) -> dict[str, Any]:
         # No bootstrap sign-in here. The plan's sign-in step owns it, so a run
         # logs one POST rather than one here and another at step 0.
 
-        index = 0
-        while index < len(steps):
-            step = steps[index]
+        for index, step in enumerate(steps):
             announce(step, index + 1, len(steps))
-
             outcome = await _perform(page, run_id, step)
-            if outcome != "ok":
-                print(f"    ! {outcome} — the window is yours. Fix it, then choose below.")
+            seen.append((step, outcome))
+            summary["counts"][outcome.status] += 1
+            print(f"    → {outcome.status}" + (f" — {outcome.detail}" if outcome.detail else ""))
+            _log(
+                run_id,
+                f"step_{outcome.status.replace('-', '_')}",
+                {"id": step["id"], "action": step.get("action"), "detail": outcome.detail},
+            )
+            # Refresh after every step: a crash mid-run still leaves a result
+            # that ends where the run did.
+            write_result(outcome_file, render_result(plan_path(run_dir), steps, seen, summary))
 
-            command = await prompt()
-            if command == "q":
-                summary["stopped"] = "quit"
-                summary["at"] = step["id"]
-                break
-            if command == "r":
-                print("    restarting from step 1")
-                _log(run_id, "restart", {"at": step["id"]})
-                await page.goto(settings.rachis_base_url, wait_until="domcontentloaded")
-                if await _sign_in(page, run_id) != "ok":
-                    print("    ! still not signed in after restart — the window is yours")
-                index = 0
-                summary["completed"].clear()
-                continue
-            if command == "p":
-                print("    paused — drive the browser by hand. Re-run to resume.")
-                _log(run_id, "pause", {"at": step["id"]})
-                summary["stopped"] = "paused"
-                summary["at"] = step["id"]
+            if outcome.status == "ok":
+                pass
+            elif outcome.status == "no-handler":
+                # A gap in the harness, not a failure of the product. Keep going
+                # so one unwritten action does not hide the rest of the run.
+                pass
+            else:
+                summary["failed"] = {"step": step["id"], "detail": outcome.detail}
                 break
 
-            if outcome == "ok":
-                summary["completed"].append(step["id"])
-                _log(run_id, "step_ok", {"id": step["id"], "action": step.get("action")})
-            index += 1
+            # Hold on the result so a human watching the window can see what was
+            # entered before the next action moves on.
+            if index + 1 < len(steps):
+                await asyncio.sleep(settings.step_delay)
 
-        # The window closes itself, unless the human asked to take it over.
-        if summary["stopped"] == "paused":
-            print("\n  browser is yours — close the window when you are done.")
-            await page.wait_for_event("close")
-        else:
-            await browser.close()
-            print(f"\n  done at {len(summary['completed'])}/{len(steps)} steps — browser closed.")
+        await browser.close()
 
+    write_result(outcome_file, render_result(plan_path(run_dir), steps, seen, summary))
+    _log(run_id, "run_result", {"result_file": str(outcome_file), **summary["counts"]})
+    counts = summary["counts"]
+    print(f"\n  result written to {outcome_file}")
+    print(
+        f"  {counts['ok']} ok · {counts['no-handler']} no handler · {counts['failed']} failed"
+        + (f" — stopped at step {summary['failed']['step']}" if summary["failed"] else "")
+    )
     return summary
 
 
-async def _sign_in(page: Any, run_id: str) -> str:
-    """Sign in from .env, or report that the window is already past the login.
+async def _sign_in(page: Any, run_id: str) -> Outcome:
+    """Sign in from .env, or report why the window is past the login.
 
-    Returns 'ok' when signed in or already inside, and a reason to hand over
-    when it cannot tell. The tenant's login form is POST-based with fields
-    `email` and `password`; nothing here is submitted anywhere else.
+    The tenant's login form is POST-based with fields `email` and `password`;
+    nothing here is submitted anywhere else.
 
     The base URL is the marketing site, not the app, so landing on it is not
     evidence of being signed in — the login route has to be reached first.
@@ -177,7 +267,7 @@ async def _sign_in(page: Any, run_id: str) -> str:
         # Already inside and bounced onward? Then there is nothing to fill.
         if "login" not in page.url:
             _log(run_id, "sign_in_ok", {"url": page.url, "already": True})
-            return "ok"
+            return Outcome("ok")
 
     email = page.locator("input[type=email]")
     password = page.locator("input[type=password]")
@@ -186,11 +276,11 @@ async def _sign_in(page: Any, run_id: str) -> str:
         # and a snapshot here reads a missing form as a login failure.
         await email.first.wait_for(state="visible", timeout=15000)
         await password.first.wait_for(state="visible", timeout=15000)
-    except Exception:  # noqa: BLE001 - no form is a handover, not a crash
-        return f"no login form at {page.url} — sign in yourself"
+    except Exception:  # noqa: BLE001 - the form genuinely did not arrive
+        return Outcome("failed", f"no login form at {page.url}")
 
     if not settings.rachis_username or not settings.rachis_password:
-        return "no credentials in .env — sign in yourself"
+        return Outcome("failed", "no credentials in .env")
 
     await email.first.fill(settings.rachis_username)
     await password.first.fill(settings.rachis_password)
@@ -204,36 +294,38 @@ async def _sign_in(page: Any, run_id: str) -> str:
         await password.first.press("Enter")
 
     # Wait for the POST to settle rather than sleeping on a guess.
-    await page.wait_for_url(lambda url: "login" not in url, timeout=15000)
+    try:
+        await page.wait_for_url(lambda url: "login" not in url, timeout=15000)
+    except Exception:  # noqa: BLE001 - still on the form means it was refused
+        return Outcome("failed", "still on the login form after submitting")
     _log(run_id, "sign_in_ok", {"url": page.url})
-    return "ok"
+    return Outcome("ok")
 
 
-async def _perform(page: Any, run_id: str, step: dict[str, Any]) -> str:
-    """Attempt a step's action. Returns 'ok' or a human-readable reason it needs a human."""
+async def _perform(page: Any, run_id: str, step: dict[str, Any]) -> Outcome:
+    """Attempt a step's action and say how it went."""
     action = step.get("action", "")
     case = step.get("case", "")
     try:
         if action == "sign-in":
             return await _sign_in(page, run_id)
-        if action in {"open-new", "print", "draft-post-correct"}:
+        if action in ROUTED_ACTIONS:
             return await _open_voucher(page, run_id, case)
-        return (
-            f"no handler for action '{action}' on {case}/ — the case handlers are not "
-            "written yet, so this step is yours"
-        )
-    except Exception as exc:  # noqa: BLE001 - a failed action must hand over, not crash
-        return f"step failed: {type(exc).__name__}: {exc}"
+        # No driver written for this action yet. Opening the voucher would not
+        # be the action asked for, so it is recorded as a gap, never as a pass.
+        return Outcome("no-handler", f"no handler for action '{action}'")
+    except Exception as exc:  # noqa: BLE001 - a crash is a failure, not a traceback
+        return Outcome("failed", f"{type(exc).__name__}: {exc}")
 
 
-async def _open_voucher(page: Any, run_id: str, case: str) -> str:
+async def _open_voucher(page: Any, run_id: str, case: str) -> Outcome:
     """Open a blank voucher by navigating to its case folder's route.
 
     Route-first rather than control-first: a new-voucher button is not present
     on every page, so label-hunting only worked when one happened to be on
-    screen. Navigation works from anywhere. A case with no known route still
-    falls through to label-hunting, and failing that becomes an intervention
-    point rather than a wrong click.
+    screen. Navigation works from anywhere. A case with no known route falls
+    through to label-hunting; failing that it is reported as a gap in the
+    harness rather than a wrong click.
 
     Routes confirmed against the live tenant on 2026-10-17.
     """
@@ -246,11 +338,11 @@ async def _open_voucher(page: Any, run_id: str, case: str) -> str:
         heading = page.get_by_role("heading", level=1).first
         try:
             await heading.wait_for(state="visible", timeout=15000)
-        except Exception:  # noqa: BLE001 - a voucher that never renders hands over
-            return f"route {route} never showed a heading — check the window"
+        except Exception:  # noqa: BLE001 - the product did not render the voucher
+            return Outcome("failed", f"route {route} never showed a heading")
         name = (await heading.inner_text()).strip()
         _log(run_id, "open_voucher", {"case": case, "route": route, "heading": name})
-        return "ok"
+        return Outcome("ok")
 
     label = _normalise(case)
     candidates = [
@@ -262,8 +354,8 @@ async def _open_voucher(page: Any, run_id: str, case: str) -> str:
         if await locator.count():
             await locator.first.click(timeout=4000)
             _log(run_id, "open_voucher", {"case": case, "via": "label"})
-            return "ok"
-    return f"no route for '{case}/' and no control on this page — open it yourself"
+            return Outcome("ok")
+    return Outcome("no-handler", f"no route for '{case}/' and no control on this page")
 
 
 def _log(run_id: str, action: str, details: dict[str, Any]) -> None:
@@ -273,7 +365,7 @@ def _log(run_id: str, action: str, details: dict[str, Any]) -> None:
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Drive a run's test.html with a human in the loop.")
+    parser = argparse.ArgumentParser(description="Drive a run's test.html in a visible browser.")
     parser.add_argument("root", nargs="?", default="test-cases", help="runs root (default: test-cases)")
     parser.add_argument("--plan", help="explicit path to a test.html, bypassing run discovery")
     args = parser.parse_args()
