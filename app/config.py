@@ -16,17 +16,3 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
-# The supplied local file uses the legacy form `username: value` rather than
-# dotenv's `RACHIS_USERNAME=value`. Support it locally without copying the
-# secret into source code; `.env` remains ignored by Git.
-if not settings.rachis_username or not settings.rachis_password:
-    legacy_env = Path(".env")
-    if legacy_env.exists():
-        legacy: dict[str, str] = {}
-        for line in legacy_env.read_text(encoding="utf-8").splitlines():
-            key, separator, value = line.partition(":")
-            if separator:
-                legacy[key.strip().lower()] = value.strip()
-        settings.rachis_username = settings.rachis_username or legacy.get("username", "")
-        settings.rachis_password = settings.rachis_password or legacy.get("password", "")
-

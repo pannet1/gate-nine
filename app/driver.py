@@ -100,7 +100,9 @@ async def drive(run_dir: Path) -> dict[str, Any]:
         page = await browser.new_page()
         await page.goto(settings.rachis_base_url, wait_until="domcontentloaded")
         _log(run_id, "open_url", {"url": settings.rachis_base_url})
-        await _fill_login(page, run_id)
+        signed_in = await _sign_in(page, run_id)
+        if signed_in != "ok":
+            print(f"    ! {signed_in}")
 
         index = 0
         while index < len(steps):
@@ -120,7 +122,8 @@ async def drive(run_dir: Path) -> dict[str, Any]:
                 print("    restarting from step 1")
                 _log(run_id, "restart", {"at": step["id"]})
                 await page.goto(settings.rachis_base_url, wait_until="domcontentloaded")
-                await _fill_login(page, run_id)
+                if await _sign_in(page, run_id) != "ok":
+                    print("    ! still not signed in after restart — the window is yours")
                 index = 0
                 summary["completed"].clear()
                 continue
@@ -146,14 +149,38 @@ async def drive(run_dir: Path) -> dict[str, Any]:
     return summary
 
 
-async def _fill_login(page: Any, run_id: str) -> None:
-    """Fill credentials if the fields are present. Never submits."""
-    if settings.rachis_username and await page.locator("input[type=email], input[name=username]").count():
-        await page.locator("input[type=email], input[name=username]").first.fill(settings.rachis_username)
-        _log(run_id, "fill_username", {})
-    if settings.rachis_password and await page.locator("input[type=password]").count():
-        await page.locator("input[type=password]").first.fill(settings.rachis_password)
-        _log(run_id, "fill_password", {})
+async def _sign_in(page: Any, run_id: str) -> str:
+    """Sign in from .env, or report that the window is already past the login.
+
+    Returns 'ok' when signed in or already inside, and a reason to hand over
+    when it cannot tell. The tenant's login form is POST-based with fields
+    `email` and `password`; nothing here is submitted anywhere else.
+    """
+    if "login" not in page.url:
+        return "ok"  # already inside — no form to fill
+
+    email = page.locator("input[type=email]")
+    password = page.locator("input[type=password]")
+    if not await email.count() or not await password.count():
+        return f"no login form at {page.url} — sign in yourself"
+
+    if not settings.rachis_username or not settings.rachis_password:
+        return "no credentials in .env — sign in yourself"
+
+    await email.first.fill(settings.rachis_username)
+    await password.first.fill(settings.rachis_password)
+    _log(run_id, "sign_in", {"user": settings.rachis_username})
+
+    submit = page.get_by_role("button", name=re.compile(r"^\s*sign in", re.I))
+    if await submit.count():
+        await submit.first.click()
+    else:
+        await password.first.press("Enter")
+
+    # Wait for the POST to settle rather than sleeping on a guess.
+    await page.wait_for_url(lambda url: "login" not in url, timeout=15000)
+    _log(run_id, "sign_in_ok", {"url": page.url})
+    return "ok"
 
 
 async def _perform(page: Any, run_id: str, step: dict[str, Any]) -> str:
