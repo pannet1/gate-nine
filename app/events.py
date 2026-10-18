@@ -37,7 +37,10 @@ def send_event(
         "details": details or {},
     }
     payload = json.dumps(event, ensure_ascii=False).encode("utf-8")
-    token = base64.b64encode(f"{username}:{password}".encode("utf-8")).decode("ascii")
+    # Only the password is validated by the remote. Send `user:password` when a
+    # username is configured, otherwise just `password` as the Basic credential.
+    credential = f"{username}:{password}" if username else password
+    token = base64.b64encode(credential.encode("utf-8")).decode("ascii")
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Basic {token}",

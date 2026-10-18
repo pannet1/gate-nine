@@ -1,0 +1,80 @@
+You are building the remote receiving side of an HTTP event ingestion interface. Implement the following contract exactly.
+
+## Endpoint
+- Method: POST
+- Content-Type: application/json
+- Auth: HTTP Basic Auth (Authorization: Basic <base64-encoded credentials>). No username is needed — only the password is validated, and it must equal the admin application's htpassword.
+- No query parameters or path parameters are required beyond the ingestion endpoint URL itself.
+
+## How to send the request
+
+Send one JSON event per HTTP POST request to the ingestion endpoint URL. Do not batch events.
+
+### Request headers
+
+| Header | Key | Value |
+|--------|-----|-------|
+| Method | - | POST |
+| Content-Type | - | application/json |
+| Authorization | Authorization | Basic <base64-encoded credentials> |
+| Host | Host | <your-host> |
+
+**No username is needed.** The credential's password must equal the admin application's htpassword (`ADMIN_SECRET_KEY`). Send either `user:password` or just `password` as the Basic Auth credential — only the password is validated.
+
+### cURL example
+
+```bash
+# Only the password matters; it must equal the admin htpassword.
+# The username can be anything, or omitted entirely.
+curl -X POST <ingest-endpoint-url> \
+  -H "Content-Type: application/json" \
+  -u "anyuser:<admin-htpassword>" \
+  -d '{
+    "timestamp": "2026-10-18T07:12:04.123456+00:00",
+    "test_id": "001",
+    "action": "step_ok",
+    "details": {}
+  }'
+```
+
+### Request body keys / values
+
+Each request carries exactly one JSON event object with the following keys:
+
+| Key | Type | Required | Value / Description |
+|-----|------|----------|---------------------|
+| timestamp | string | Yes | ISO-8601 UTC timestamp, e.g. `2026-10-18T07:12:04.123456+00:00` |
+| test_id | string | Yes | Identifier for the run or session, e.g. `001` |
+| action | string | Yes | Event type (free-form string, e.g. `step_ok`) |
+| details | object | Yes | Free-form event context; contents vary by action, e.g. `{}` |
+
+### Raw HTTP example
+
+POST /ingest HTTP/1.1
+Host: <your-host>
+Authorization: Basic <credentials>
+Content-Type: application/json
+
+{
+  "timestamp": "2026-10-18T07:12:04.123456+00:00",
+  "test_id": "001",
+  "action": "step_ok",
+  "details": {}
+}
+
+## Fields
+| Field      | Type     | Description                                        |
+|------------|----------|----------------------------------------------------|
+| timestamp  | string   | ISO-8601 UTC timestamp                             |
+| test_id    | string   | Identifier for the run or session                  |
+| action     | string   | Event type (free-form string, e.g. "step_ok")      |
+| details    | object   | Free-form event context; contents vary by action   |
+
+## Response
+- Return a 2xx status code on successful ingestion.
+- Any non-2xx or unreachable service is tolerated by the caller (events are fire-and-forget; the caller does not retry indefinitely).
+
+## Behavior notes
+- Events arrive in real time as the source process executes.
+- The caller configures the endpoint URL and Basic Auth credentials externally; your service should expect and validate the Authorization header.
+- The caller keeps no local event log — your service is the system of record for the stream.
