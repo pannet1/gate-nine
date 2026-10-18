@@ -20,9 +20,9 @@
 <p><strong>Last updated:</strong> 2026-10-18</p>
 <p>This page is the one place the team follows for how this project is designed and
 how it grows. It records the control flow and the conventions around it — not what to
-test or how to test. The brief is the source of what to test; the how lives in
-<code>app/vouchers/&lt;case&gt;/test-case.html</code>, and <code>test.html</code> holds only
-the order in which those cases run. Update this page in the same change that moves the design forward.</p>
+test or how to test. The brief is the source of what to test; the how lives in the recorded
+<code>&lt;case&gt;.py</code> inside the run folder. Update this page in the same change that
+moves the design forward.</p>
 
 <h2>1. Aim &amp; System Boundary</h2>
 <p><strong>To see the browser entering data.</strong> Everything in this project is geared
@@ -58,59 +58,50 @@ observable is the wrong change.</p>
 </table>
 
 <h2>3. Folder layout</h2>
-<p>Vouchers are canonical and live in <code>app/vouchers/</code> — one folder per unique
-document, holding its <code>test-case.html</code>. A run never owns a voucher; it links
-to one.</p>
-<pre>app/vouchers/                 # canonical — one folder per unique document
-├── login/
-│   └── test-case.html
-├── sales-invoice/
-│   └── test-case.html
-├── purchase-bill/
-│   └── test-case.html
-├── goods-receipt/
-│   └── test-case.html
-├── credit-note/
-│   └── test-case.html
-└── debit-note/
-    └── test-case.html</pre>
-<p><strong>Login is a case, not a voucher.</strong> It holds no voucher type and appears in no
-voucher phase — it is the door every other case walks through, so it lives here for the same
-reason the others do and is linked into every run. Every <code>test.html</code> opens with it.</p>
-<p>A human creates a uniquely numbered run folder — the <strong>run_id</strong>, zero-padded
-(<code>001</code>, <code>002</code>, …) — and drops in a Markdown brief plus symlinks to
-the vouchers under test. The runner never invents a run_id; it only ever reads the
-highest-numbered folder that already exists.</p>
+<p><strong>The brief is the only input document.</strong> Murugesan writes a Markdown brief
+describing the testing workflow — which vouchers, in what order, and what each one must
+prove. A human creates the next sequential run folder and drops the brief in. The brief's
+filename is free — <code>notes.MD</code>, <code>header-fields.md</code>, whatever the author
+chose. Only the <code>.md</code> extension matters, because that is what the loop looks for.</p>
+<p>The runner never invents a run_id; it only ever reads the highest-numbered folder that
+already exists, and never executes without a human-authored brief.</p>
+<p><strong>There is no plan file.</strong> <code>test.html</code> is gone. It existed only to
+tell an AI which verbs to synthesise, and with recorded code there is nothing left to
+synthesise. The recording <em>is</em> the test.</p>
 <pre>test-cases/
 └── 001/                    # run_id — created by a human
-    ├── &lt;any-name&gt;.md       # brief from Murugan — name is free, only .md matters
-    ├── test.html           # the ordered plan — which case runs when, nothing else
-    ├── voucher.png         # current evidence screenshot
-    ├── login           -&gt;  ../../app/vouchers/login
-    ├── sales-invoice   -&gt;  ../../app/vouchers/sales-invoice
-    ├── purchase-bill   -&gt;  ../../app/vouchers/purchase-bill
-    ├── goods-receipt   -&gt;  ../../app/vouchers/goods-receipt
-    ├── credit-note     -&gt;  ../../app/vouchers/credit-note
-    └── debit-note      -&gt;  ../../app/vouchers/debit-note</pre>
-<p>Each symlink is <code>../../</code> — two levels up from the run folder reaches the
-project root.</p>
-<p><strong>The plan carries the order; the case folder carries the method.</strong>
-<code>test.html</code> says which case runs when — step, test number, action, and the folder
-that owns it. It states no steps, no checks, and no expected results, because those belong to
-<code>app/vouchers/&lt;case&gt;/test-case.html</code> and to nowhere else. Putting the how-to
-in the plan as well would mean the same method written twice, drifting apart the moment
-either copy is edited. If a step needs a different method, the case folder changes — not the
-plan.</p>
-<p><strong>Revised in place, not versioned.</strong> A voucher is one live document. A later
-run linking it sees whatever it says now, and revising it for a later run rewrites what an
-earlier run pointed at — accepted, because history is carried by the run's evidence, not by
-the document. Dead versions are not wanted.</p>
-<p>The brief's filename is free — <code>notes.MD</code>, <code>header-fields.md</code>,
-whatever its author chose. Only the <code>.md</code> extension matters, because that is
-what the loop looks for.</p>
+    ├── &lt;any-name&gt;.md       # brief from Murugesan — the only input document
+    ├── sales-invoice.py    # recorded flow, produced by codegen
+    ├── purchase-bill.py    # recorded flow, produced by codegen
+    ├── auth.json           # saved auth state, reused by every replay
+    └── voucher.png         # current evidence screenshot</pre>
+<p><strong>Recordings live inside the run folder.</strong> They are not canonical and not
+shared between runs. Run <code>002</code> carries its own copies; when the product changes, a
+run re-records against the current DOM rather than inheriting selectors that may no longer
+resolve. History is carried by the run's evidence, not by a shared document.</p>
+<p><strong>The brief says what to test. The recording is how.</strong> The brief carries the
+workflow; each <code>&lt;case&gt;.py</code> carries the exact interactions and assertions for
+that case. Neither restates the other.</p>
 
 <h2>4. Intended workflow</h2>
-<p>The application follows a strict 4-step human-supervised cycle: <strong>Step A &rarr; Step B &rarr; Step C &rarr; Step D</strong>.</p>
+<p>The developer provides a testing workflow. The loop records a new test, or replays a
+recorded one, and repeats until every test passes.</p>
+
+<pre>developer provides a testing workflow
+        │
+        ▼
+   ┌─ new test? ──yes──▶ human drives manually, codegen recording ON
+   │                          │
+   │                     bug found? ──yes──▶ HALT
+   │                          │no
+   │                    recording saved to run folder
+   │
+   └─no──▶ play the recorded code again
+              │
+         bug found? ──yes──▶ inform developer ──▶ developer fixes ──┐
+              │no                                                 │
+              └──────────── all tests pass ◀───────────────────────┘
+                            (loop breaks)</pre>
 
 <table>
     <thead>
@@ -125,186 +116,213 @@ what the loop looks for.</p>
     <tbody>
         <tr>
             <td><strong>Step A</strong></td>
-            <td>Human creates run</td>
-            <td>Murugan / Tester</td>
+            <td>Human provides the workflow</td>
+            <td>Murugan</td>
             <td>Manual brief writing &amp; run directory creation</td>
             <td><code>test-cases/&lt;run_id&gt;/&lt;brief&gt;.md</code></td>
         </tr>
         <tr>
             <td><strong>Step B</strong></td>
-            <td>Voucher training &amp; plan prep</td>
-            <td>Human + Playwright <code>codegen</code> + AI</td>
-            <td>Live browser recording (30s) &amp; AI plan packaging</td>
-            <td><code>app/vouchers/&lt;case&gt;/test-case.html</code>, <code>test-cases/&lt;run_id&gt;/test.html</code></td>
+            <td>Record a new test</td>
+            <td>Human + Playwright <code>codegen</code></td>
+            <td>Live manual driving with recording on; halts when a bug is found</td>
+            <td><code>test-cases/&lt;run_id&gt;/&lt;case&gt;.py</code></td>
         </tr>
         <tr>
             <td><strong>Step C</strong></td>
-            <td>Visible unattended execution</td>
-            <td>Playwright Driver</td>
-            <td>Visible Chromium (<code>HEADLESS = False</code>) + Playwright verbs</td>
+            <td>Replay a recorded test</td>
+            <td>Playwright runner</td>
+            <td>Visible Chromium (<code>HEADLESS = False</code>) executing the recording</td>
             <td>Events streamed to <code>events_url</code> over HTTP Basic Auth (no local log)</td>
         </tr>
         <tr>
             <td><strong>Step D</strong></td>
-            <td>AI diagnosis &amp; triage</td>
-            <td>AI Diagnostician</td>
-            <td><code>app.diagnose</code> automated inspection of log &amp; plan</td>
-            <td>Read-only triage report (harness vs product bug)</td>
+            <td>Inform the developer</td>
+            <td>Runner + terminal summary</td>
+            <td>Failed assertion reported by case, step, and message</td>
+            <td>Remote event stream + terminal summary</td>
         </tr>
     </tbody>
 </table>
 
 <fieldset>
-    <legend><strong>Step A — Human Creates the Run</strong></legend>
-    <p>A human writes the brief in Markdown and creates the next sequential run folder under <code>test-cases/</code> (e.g. <code>001</code>, <code>002</code>).
-    The system never invents a run folder or executes without a human-authored brief.</p>
+    <legend><strong>Step A — Human Provides the Workflow</strong></legend>
+    <p>Murugesan writes the brief in Markdown — which vouchers, in what order, and what each
+must prove — and a human creates the next sequential run folder under <code>test-cases/</code>
+(e.g. <code>001</code>, <code>002</code>). This brief is the first and only input document the
+loop receives.</p>
+<p class="note">The system never invents a run folder, and never executes without a
+human-authored brief. No <code>.md</code> file means the loop does not proceed — it does not
+guess and does not fall back to any other source.</p>
 </fieldset>
 
 <fieldset>
-    <legend><strong>Step B — Fast Voucher Training via Playwright <code>codegen</code> &amp; Plan Synthesis</strong></legend>
-    <p>Instead of having AI struggle to guess or generate brittle browser code from prose, Gate Nine utilizes Playwright's native <strong><code>codegen</code></strong> feature. This records real, resilient selectors (<code>get_by_placeholder</code>, <code>get_by_role</code>) directly from the live DOM in 30 seconds.</p>
+    <legend><strong>Step B — Record a New Test via Playwright <code>codegen</code></strong></legend>
+    <p>A test that does not yet exist is driven manually by a human, with <code>codegen</code>
+recording. The recording captures real, resilient selectors (<code>get_by_placeholder</code>,
+<code>get_by_role</code>) directly from the live DOM, so nothing is guessed or hallucinated.</p>
+<p><strong>The run halts the moment a bug is found.</strong> During this step the human is the
+detector — they are watching the screen, and they stop. That is the whole bug-detection
+mechanism at record time.</p>
 
     <details open>
-        <summary><b>Why Playwright <code>codegen</code> Replaces Raw AI Code Generation</b></summary>
+        <summary><b>Why <code>codegen</code> Replaces AI-Written Selectors</b></summary>
         <table>
             <thead>
                 <tr>
                     <th>Dimension</th>
-                    <th>Traditional AI Code Generation</th>
-                    <th>Playwright <code>codegen</code> Workflow</th>
+                    <th>AI-written selectors</th>
+                    <th><code>codegen</code> recording</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
                     <td><strong>Selector Accuracy</strong></td>
-                    <td>AI guesses CSS/XPath selectors from text; prone to broken or hallucinated locators.</td>
-                    <td>Generates 100% accurate, resilient locators directly from live user actions.</td>
+                    <td>AI guesses CSS/XPath from prose; prone to broken or hallucinated locators.</td>
+                    <td>Records locators directly from live user actions.</td>
                 </tr>
                 <tr>
                     <td><strong>Speed &amp; Effort</strong></td>
-                    <td>Iterative trial-and-error debugging over multiple context turns.</td>
-                    <td>Human tester or developer clicks through the form once in <strong>30 seconds</strong>.</td>
+                    <td>Iterative trial-and-error across multiple turns.</td>
+                    <td>The human clicks through the form once.</td>
                 </tr>
                 <tr>
                     <td><strong>Role of AI</strong></td>
-                    <td>Struggles to write raw browser automation from scratch without DOM access.</td>
-                    <td>Translates recorded code into standard verbs (<code>open</code>, <code>input</code> with name arrays, <code>click</code>, <code>verify</code>, <code>screenshot</code>).</td>
+                    <td>Writes raw browser automation without DOM access.</td>
+                    <td>None during recording. The human drives; the machine records.</td>
                 </tr>
             </tbody>
         </table>
     </details>
 
     <details>
-        <summary><b>Playwright <code>codegen</code> Commands &amp; Storage State</b></summary>
-        <p>1. <strong>Save authentication state once:</strong></p>
+        <summary><b>Commands &amp; saved authentication state</b></summary>
+        <p>1. <strong>Save authentication state once, into the run folder:</strong></p>
         <pre><kbd>uv run playwright codegen --save-storage=auth.json https://rachis.co.in/login/</kbd></pre>
-        <p>2. <strong>Record a new voucher flow pre-authenticated:</strong></p>
-        <pre><kbd>uv run playwright codegen --load-storage=auth.json https://rachis.co.in/accounting/sales-invoices/new/</kbd></pre>
-        <p>3. <strong>Synthesize into Gate Nine plan:</strong> AI takes the recorded interactions, parameterizes fields into the ordered plan format in <code>test.html</code>, and updates the canonical voucher method in <code>app/vouchers/&lt;case&gt;/test-case.html</code>.</p>
+        <p>2. <strong>Record a voucher flow, already authenticated:</strong></p>
+        <pre><kbd>uv run playwright codegen --load-storage=auth.json -o sales-invoice.py https://rachis.co.in/accounting/sales-invoices/new/</kbd></pre>
+        <p>Login is infrastructure, not a test. It is saved once and loaded on every recording
+and every replay, so no recording carries a login flow of its own.</p>
     </details>
 </fieldset>
 
 <fieldset>
-    <legend><strong>Step C — Main Loop Drives Visibly</strong></legend>
-    <p>The main runner (<code>app.driver</code>) executes the generated plan in a visible Chromium browser (<code>HEADLESS = False</code>):</p>
+    <legend><strong>Step C — Replay a Recorded Test</strong></legend>
+    <p>A test that already exists is played back by executing its recording in a visible
+Chromium browser (<code>HEADLESS = False</code>, §1):</p>
     <ul>
-        <li>Reads ordered steps from the machine-readable plan inside <code>test.html</code>.</li>
-        <li>POSTs every operation as an event to <code>events_url</code> over HTTP Basic Auth (nothing is written to a local log).</li>
-        <li>Drives forms using standard Playwright verbs: <code>open</code>, <code>input</code> (supporting regular fields and <code>name</code> arrays like <code>["item", "qty"]</code> for line items), <code>click</code>, <code>verify</code>, and <code>screenshot</code>.</li>
-        <li>Between actions, holds for <code>STEP_DELAY</code> (3 seconds) for human observation.</li>
+        <li>Load <code>auth.json</code> so the run starts already signed in.</li>
+        <li>Execute <code>&lt;case&gt;.py</code> as written — the same calls, in the same order,
+            against the same selectors.</li>
+        <li>POST every operation as an event to <code>events_url</code> over HTTP Basic Auth
+            (nothing is written to a local log).</li>
+        <li>Hold <code>STEP_DELAY</code> (3 seconds) between operations so a human can follow
+            what was entered.</li>
     </ul>
-    <p class="note">Configure the remote endpoint in <code>.env</code>: <code>EVENTS_URL</code>, <code>EVENTS_USERNAME</code>, <code>EVENTS_PASSWORD</code>. When <code>EVENTS_URL</code> is empty, events are not recorded.</p>
+    <p class="note">Configure the remote endpoint in <code>.env</code>: <code>EVENTS_URL</code>
+    and <code>EVENTS_PASSWORD</code>. When <code>EVENTS_URL</code> is empty, events are not
+    recorded.</p>
 </fieldset>
 
 <fieldset>
-    <legend><strong>Step D — AI Diagnoses the Completed Run</strong></legend>
-    <p>When the run ends and <code>test.html</code> exists in the run folder, <code>app.diagnose</code> inspects the outcome against the events streamed to the remote endpoint:</p>
+    <legend><strong>Step D — Inform the Developer, and the Loop Repeats</strong></legend>
+    <p>A bug surfaces in exactly one of two ways, and the two are different because the two
+kinds of run are different:</p>
     <ul>
-        <li>Surfaces Playwright runtime diagnostics (console errors, uncaught exceptions, network failures, page crashes).</li>
-        <li>Verifies zero harness gaps (<code>step_no_handler</code>) in production runs.</li>
-        <li>Separates product defects from harness issues, keeping bug classification undetermined until human developer review.</li>
+        <li><strong>During recording (Step B)</strong> — the human decides. They are watching
+            and they halt. No automation is involved.</li>
+        <li><strong>During replay (Step C)</strong> — a recorded <code>expect()</code>
+            assertion failed, or the recording threw. That is the bug.</li>
     </ul>
+    <p>Either way the developer is informed: the event stream carries it, and the terminal
+prints a summary naming the case, the step, and the assertion that failed.</p>
+    <p class="note"><strong>A recording with no assertions can only detect crashes.</strong> It
+    proves "the flow still runs", never "the numbers are right". Any case with a right answer
+    — tax totals, posted status, printed output — must carry an <code>expect()</code> for that
+    answer, or it cannot fail on a wrong value.</p>
+    <p>The developer fixes the product and re-runs. The loop breaks when every test passes.</p>
 </fieldset>
 
-<h2>5. Structured action &amp; Playwright verb contract</h2>
-<p>All browser interactions are driven by standard Playwright verbs without ad-hoc custom verbs:</p>
+<h2>5. Recording contract</h2>
+<p>A recording is ordinary Playwright code. It is executed, not interpreted — the runner
+imports nothing from it and rewrites nothing in it. What a recording contains is what a
+recorded test does.</p>
 <ul>
-    <li><code>open</code>: Navigates directly to routes (e.g. <code>/accounting/sales-invoices/new/</code>).</li>
-    <li><code>input</code>: Fills header fields and line item table rows, supporting scalar fields and <code>name</code> arrays paired with value arrays for multi-column line item entry (e.g. <code>["item", "qty"]</code> paired with <code>["Hamam", "2"]</code>).</li>
-    <li><code>click</code>: Interacts with buttons, tabs, and action controls (e.g. <code>Save draft</code>, <code>Print</code>, <code>Post</code>, <code>✕</code>).</li>
-    <li><code>verify</code>: Asserts page calculations, rendered elements, and tax summaries (e.g. <code>verify tax</code>).</li>
-    <li><code>screenshot</code>: Captures evidence snapshots (<code>voucher.png</code>).</li>
+    <li><strong>Navigation:</strong> <code>page.goto()</code> to the recorded route.</li>
+    <li><strong>Input:</strong> <code>get_by_placeholder()</code>, <code>get_by_label()</code>,
+        <code>get_by_role()</code> — whatever the DOM actually offered at record time.</li>
+    <li><strong>Interaction:</strong> <code>click()</code>, <code>press()</code>,
+        <code>select_option()</code> on buttons, tabs, and action controls.</li>
+    <li><strong>Assertion:</strong> <code>expect()</code> for anything with a right answer.</li>
+    <li><strong>Evidence:</strong> <code>screenshot()</code> for the final or failing state.</li>
+</ul>
+<p><strong>Invariants.</strong></p>
+<ul>
+    <li><strong>No selector is ever written by the AI.</strong> Every locator in a recording
+        came from a human clicking the real DOM.</li>
+    <li><strong>Every case with a right answer carries an assertion.</strong> A recording of
+        clicks and fills alone cannot fail on a wrong value — it can only fail by crashing.
+        Tax totals, posted status, and printed output each need an <code>expect()</code>.</li>
+    <li><strong>Login is never in a recording.</strong> It is loaded from
+        <code>auth.json</code>.</li>
 </ul>
 
-<p><strong>Sample Plan Step JSON Block (inside <code>test.html</code>):</strong></p>
-<pre><code>{
-  "phase": "C",
-  "test": "Test 3",
-  "action": "input",
-  "name": ["item", "qty"],
-  "value": ["Hamam", "2"],
-  "case": "sales-invoice"
-}</code></pre>
-
-<p><strong>Strict Production Invariant: Zero Harness Gaps.</strong> Production runs must execute with 0 <code>step_no_handler</code> occurrences. Line items are represented as standard <code>input</code> verbs with column <code>name</code> arrays rather than legacy custom verbs like <code>add_line</code>.</p>
-<p><strong>Operation Logging Format:</strong> Every operation logs to JSONL following the pattern: <code>operation &lt;name:value&gt; &lt;form name&gt;</code> (e.g. <code>input item:Hamam sales-invoice</code>, <code>click Save draft sales-invoice</code>).</p>
-
 <h2>6. Main loop details</h2>
-<p><strong>Playwright drives; the human watches.</strong> The run is unattended — nothing
+<p><strong>Playwright replays; the human watches.</strong> A replay is unattended — nothing
 prompts, and nothing waits for a keystroke.</p>
 <ol>
     <li>Find the latest <code>run_id</code> — the highest-numbered folder under
         <code>test-cases/</code>.</li>
-    <li><strong>Discover the <code>.md</code> file from Murugan inside it.</strong>
-        The name is irrelevant; only its presence counts.</li>
-    <li>Proceed with <code>test.html</code>. If it is absent, the tester or AI records the
-        live interaction via <strong>Playwright <code>codegen</code></strong>, and the AI synthesizes
-        the ordered plan (<code>test.html</code>) and canonical method (<code>app/vouchers/&lt;case&gt;/test-case.html</code>)
-        — the system never guesses or hallucinates selectors.</li>
+    <li><strong>Discover the <code>.md</code> file from Murugesan inside it.</strong>
+        The name is irrelevant; only its presence counts. Without it, the loop does not proceed.</li>
+    <li>Collect every <code>*.py</code> recording in the run folder. Each one is a test that
+        already exists.</li>
     <li>Open Chromium <strong>visible, never headless</strong> (§1).</li>
-    <li>Read the machine-readable plan block inside <code>test.html</code> and execute its
-        steps in order using standard Playwright verbs (<code>open</code>, <code>input</code>, <code>click</code>, <code>verify</code>, <code>screenshot</code>).
-        Line items are treated just like regular fields using <code>name</code> arrays (e.g. <code>['item', 'qty']</code>).
-        Legacy <code>add_line</code> pseudo-actions are eliminated, ensuring production runs execute with zero harness gaps.</li>
-    <li>Between steps the runner holds for a fixed delay — <code>step_delay</code>, default
-        3 seconds, set by <code>STEP_DELAY</code> — so human eyes can follow what was just
-        entered before the next action fires.</li>
-    <li>An unsupported action is recorded and stops the run as
-        <code>incomplete</code>. Merely opening a form is not counted as completing its test.</li>
-    <li>A step that genuinely fails stops the run there, per the Run Lifecycle (§7). The browser closes and
-        the terminal returns.</li>
-    <li>Every step's outcome is POSTed as an event to <code>events_url</code> over HTTP Basic Auth. A summary is
-        printed when the run ends.</li>
-    <li><code>uv run python -m app.diagnose</code> inspects the completed run folder for Step D,
-        surfacing unhandled actions, failed steps, and Playwright error diagnostics before human-in-the-loop review.</li>
+    <li>Load <code>auth.json</code> so every recording starts signed in.</li>
+    <li>Execute each recording in turn, exactly as written. No interpretation, no
+        substitution of values, no synthesis.</li>
+    <li>Hold <code>STEP_DELAY</code> (3 seconds) between operations so human eyes can follow
+        what was just entered before the next action fires.</li>
+    <li>POST every operation as an event to <code>events_url</code> over HTTP Basic Auth.
+        Nothing is written to a local log.</li>
+    <li>A failed assertion or an uncaught throw stops that recording, is reported by case,
+        step, and message, and ends the run.</li>
+    <li>When every recording passes, the browser closes, the terminal returns, and the loop
+        breaks.</li>
 </ol>
-<p class="note">No <code>.md</code> file in the run folder means the loop does not
-proceed. It does not guess and does not fall back to any other source.</p>
 
 <h2>7. Lifecycle</h2>
 <details open>
-    <summary><b>Case Lifecycle</b></summary>
-    <p><code>draft &rarr; codegen-recorded &rarr; ai-prepared &rarr; human-approved &rarr; running &rarr; passed | failed</code></p>
+    <summary><b>Test Lifecycle</b></summary>
+    <p><code>briefed &rarr; recorded &rarr; running &rarr; passed | failed</code></p>
     <ul>
-        <li><mark>draft</mark>: Voucher document or brief proposed.</li>
-        <li><mark>codegen-recorded</mark>: Live tester actions recorded via <code>playwright codegen</code> with 100% accurate DOM selectors.</li>
-        <li><mark>ai-prepared</mark>: Parameterized actions formatted into canonical <code>test-case.html</code> and plan.</li>
-        <li><mark>human-approved</mark>: Human confirms test data and authorized voucher mutations.</li>
-        <li><mark>running</mark>: Executed visibly by Playwright.</li>
-        <li><mark>passed | failed</mark>: Final verdict decided by verification checks and human review.</li>
+        <li><mark>briefed</mark>: The workflow names the test. No code exists yet.</li>
+        <li><mark>recorded</mark>: A human drives it manually with <code>codegen</code>
+            recording on, writing <code>&lt;case&gt;.py</code> into the run folder. The test now
+            exists and can be replayed.</li>
+        <li><mark>running</mark>: Executed visibly by Playwright from the recording.</li>
+        <li><mark>passed</mark>: Every recorded assertion held.</li>
+        <li><mark>failed</mark>: An assertion failed, or the recording threw. The developer is
+            informed and fixes the product.</li>
     </ul>
 </details>
 
 <details open>
     <summary><b>Run Lifecycle</b></summary>
-    <p><code>brief-present &rarr; plan &rarr; running &rarr; incomplete | failed | passed</code></p>
+    <p><code>brief-present &rarr; recording &rarr; replay &rarr; failed | passed</code></p>
     <ul>
-        <li><code>incomplete</code>: The runner stops immediately on any unsupported action. Merely opening a voucher never counts as a test pass.</li>
-        <li><code>failed</code>: A step failure stops the run immediately to avoid compounding errors.</li>
-        <li><code>passed</code>: A run is only marked <code>passed</code> when all steps succeed and at least one verification check (<code>verify</code>) has executed.</li>
+        <li><code>brief-present</code>: A human-authored <code>.md</code> exists in the run
+            folder. Without it the loop does not proceed.</li>
+        <li><code>recording</code>: Tests not yet recorded are driven manually, with
+            <code>codegen</code> on, halting when a bug is found.</li>
+        <li><code>replay</code>: Recorded tests are played back unattended in visible Chromium.</li>
+        <li><code>failed</code>: A recording stopped on a failed assertion or a throw. The
+            developer is informed.</li>
+        <li><code>passed</code>: Every recording in the run passed. The loop breaks.</li>
     </ul>
-    <p>A failed or incomplete run is not resumed. The next attempt is a fresh
-    <code>run_id</code> (<code>002</code>, <code>003</code>, …) with the corrected brief or harness.</p>
+    <p>A failed run is not resumed. The developer fixes the product and re-runs; the next
+    attempt is a fresh <code>run_id</code> (<code>002</code>, <code>003</code>, …) with its
+    own recordings made against the current DOM.</p>
 </details>
 
 <h2>8. Logging &amp; remote event streaming</h2>
@@ -330,10 +348,7 @@ so Murugan and Jashveer see real-time progress.</p>
 <ul>
     <li>Pure CLI: Browser execution, event logging, and diagnostics operate via local Python CLI commands. Events are streamed to <code>events_url</code> over HTTP Basic Auth; nothing is written to a local log.</li>
     <li>Remote terminal-only compute for the developers to watch the live event stream via the remote endpoint (or any httpd-protected log viewer).</li>
-    <li><code>app.driver</code> is the sole browser runner executing the plan in visible Chromium and POSTing events remotely.</li>
-    <li><code>app.diagnose</code> is the read-only post-run diagnosis gate (Step D) that inspects the latest
-        run folder and surfaces harness gaps or browser errors, keeping product-bug classification undetermined
-        until human browser review.</li>
+    <li><code>app.driver</code> is the sole browser runner, replaying recordings in visible Chromium and POSTing events remotely.</li>
     <li>Runtime data is gitignored: <code>.env</code> and every run-local screenshot. Evidence may quote tenant data, so it is never
         committed.</li>
 </ul>
@@ -344,20 +359,25 @@ so Murugan and Jashveer see real-time progress.</p>
     <li>The runner may open and inspect the tenant but must not create or post a voucher
         unless a human approved that specific case and its test data.</li>
     <li>A human owns the final PASS/FAIL — an AI model never marks a run as passed.</li>
-    <li>The AI writes <code>test.html</code>; the main loop writes the run log and evidence
-        files. The human writes the brief and controls the approval/training decisions.</li>
+    <li>No AI writes selectors or assertions. Recordings are produced by a human driving the live
+        DOM; the runner only executes them. The human writes the brief and decides PASS/FAIL.</li>
 </ul>
 
 <h2>11. Open items</h2>
 <ul>
-    <li><strong>Voucher handlers &amp; Step B codegen workflow — complete.</strong> <code>app/driver.py</code> implements
-        all designed Playwright verbs: <code>open</code> (voucher routes and URLs), <code>input</code>
-        (scalar fields, line items with <code>name</code> arrays like <code>['item', 'qty']</code>),
-        <code>click</code> (drafting, posting, printing, button actions), <code>verify</code>
-        (tax assertions, text and calculation checks), and <code>screenshot</code> (evidence capture).
-        Step B uses Playwright's native <code>codegen</code> for fast, 30-second live recording, eliminating
-        hallucinated selectors and ensuring production runs execute with zero harness gaps.</li>
-    <li><strong>Live tenant routes.</strong> The five vouchers in the plan are
+    <li><strong>The loop has not been rebuilt to this design.</strong> §3 through §7 now
+        describe the intended loop, but the code still executes the superseded design.
+        <code>app/driver.py</code> reads a verb plan out of <code>test.html</code> and
+        synthesises selectors at runtime, <code>app/vouchers/&lt;case&gt;/test-case.html</code>
+        still holds hand-written method prose, and <code>app/diagnose.py</code> inspects a plan.
+        Replaying recorded <code>*.py</code> files instead is the outstanding work.</li>
+    <li><strong>No recordings exist yet.</strong> Every case named in the brief needs a human to
+        drive it once with <code>codegen</code> recording, including an <code>expect()</code> for
+        anything with a right answer.</li>
+    <li><strong>Assertions are the only automated bug detector on replay.</strong> Until each case
+        carries one, a replay proves the flow still runs and nothing more — a wrong tax total
+        passes silently.</li>
+    <li><strong>Live tenant routes.</strong> The vouchers are
         confirmed against the live tenant (2026-10-17) and open by route rather
         than by hunting for a control: Sales Invoice &rarr; <code>/accounting/sales-invoices/new/</code>,
         Purchase Bill &rarr; <code>/accounting/bills/new/</code>, GRN &rarr;
