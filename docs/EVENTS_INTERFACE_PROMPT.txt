@@ -18,16 +18,20 @@ Send one JSON event per HTTP POST request to the ingestion endpoint URL. Do not 
 | Content-Type | - | application/json |
 | Authorization | Authorization | Basic <base64-encoded credentials> |
 | Host | Host | <your-host> |
+| User-Agent | User-Agent | curl/7.81.0 |
 
-**No username is needed.** The credential's password must equal the admin application's htpassword (`ADMIN_SECRET_KEY`). Send either `user:password` or just `password` as the Basic Auth credential — only the password is validated.
+**No username is needed.** The credential's password must equal the admin application's htpassword (`ADMIN_SECRET_KEY`). The caller sends the credential as `anyuser:<password>` — only the password is validated.
+
+**The `User-Agent` header is mandatory.** The ingestion endpoint sits behind a bot filter that rejects non-curl client identifiers with `HTTP 403` / Cloudflare `error code: 1010`. A request without `User-Agent: curl/7.81.0` will be rejected even when the password is correct.
 
 ### cURL example
 
 ```bash
 # Only the password matters; it must equal the admin htpassword.
-# The username can be anything, or omitted entirely.
+# The username can be anything. The User-Agent must be a curl identifier.
 curl -X POST <ingest-endpoint-url> \
   -H "Content-Type: application/json" \
+  -H "User-Agent: curl/7.81.0" \
   -u "anyuser:<admin-htpassword>" \
   -d '{
     "timestamp": "2026-10-18T07:12:04.123456+00:00",
@@ -54,6 +58,7 @@ POST /ingest HTTP/1.1
 Host: <your-host>
 Authorization: Basic <credentials>
 Content-Type: application/json
+User-Agent: curl/7.81.0
 
 {
   "timestamp": "2026-10-18T07:12:04.123456+00:00",
