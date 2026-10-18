@@ -3,6 +3,9 @@
 .env.*
 !.env.example
 
+# Saved Playwright authentication state — holds session cookies for the tenant
+auth.json
+
 # Python caches and virtual environments
 __pycache__/
 *.py[cod]
@@ -25,6 +28,9 @@ logs/
 *.pdf
 screenshots/
 
+# Event logs stream to the remote endpoint and are not kept locally
+test-cases/*/events.jsonl
+
 # Editor and operating-system files
 .idea/
 .vscode/
@@ -40,4 +46,3 @@ htmlcov/
 dist/
 build/
 *.egg-info/
-test-cases/*/events.jsonl
