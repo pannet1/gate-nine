@@ -1,9 +1,8 @@
 """Send run events to a remote FastAPI endpoint over HTTP Basic Auth.
 
-No local JSONL log is kept. Every event is POSTed to ``events_url`` using only
-the configured httpd password as the Basic Auth credential (no username needed
-by the remote). A logging failure never crashes a run — it is reported to
-stderr and the run continues.
+No local JSONL log is kept. Every event is POSTed to ``events_url`` using the
+``anyuser:<password>`` Basic Auth credential (matching the working curl
+equivalent). Only the password is validated by the remote.
 """
 
 import base64
@@ -37,8 +36,10 @@ def send_event(
         "details": details or {},
     }
     payload = json.dumps(event, ensure_ascii=False).encode("utf-8")
-    # Only the password is validated by the remote — send it as the Basic credential.
-    token = base64.b64encode(password.encode("utf-8")).decode("ascii")
+    # Match the working curl equivalent: -u "anyuser:<password>".
+    # Only the password is validated by the remote.
+    credential = f"anyuser:{password}"
+    token = base64.b64encode(credential.encode("utf-8")).decode("ascii")
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Basic {token}",

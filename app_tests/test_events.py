@@ -51,7 +51,7 @@ class EventSendTests(unittest.TestCase):
         decoded = base64.b64decode(
             captured["headers"]["Authorization"].split(" ", 1)[1]
         ).decode("utf-8")
-        self.assertEqual(decoded, "secret")
+        self.assertEqual(decoded, "anyuser:secret")
 
     def test_send_event_returns_false_when_unreachable(self) -> None:
         with patch(
