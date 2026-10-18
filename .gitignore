@@ -40,3 +40,4 @@ htmlcov/
 dist/
 build/
 *.egg-info/
+test-cases/*/events.jsonl
