@@ -8,8 +8,8 @@ class Settings(BaseSettings):
     headless: bool = False
     # Remote event ingestion endpoint over HTTP Basic Auth.
     # When empty, events are not recorded anywhere — no local log is kept.
+    # Only the password is validated by the remote (no username needed).
     events_url: str = ""
-    events_username: str = ""
     events_password: str = ""
     # Seconds the visible browser holds after each step, so eyes can keep up
     # with what was just entered. The run is unattended; this is its only pause.

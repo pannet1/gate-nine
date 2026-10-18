@@ -31,7 +31,6 @@ class EventSendTests(unittest.TestCase):
         with patch("app.events.urllib.request.urlopen", side_effect=fake_open):
             ok = send_event(
                 "https://events.example/ingest",
-                "alice",
                 "secret",
                 test_id="001",
                 action="sign_in",
@@ -47,6 +46,12 @@ class EventSendTests(unittest.TestCase):
         self.assertTrue(captured["body"]["timestamp"])
         self.assertIn("Authorization", captured["headers"])
         self.assertTrue(captured["headers"]["Authorization"].startswith("Basic "))
+        import base64
+
+        decoded = base64.b64decode(
+            captured["headers"]["Authorization"].split(" ", 1)[1]
+        ).decode("utf-8")
+        self.assertEqual(decoded, "secret")
 
     def test_send_event_returns_false_when_unreachable(self) -> None:
         with patch(
@@ -55,49 +60,11 @@ class EventSendTests(unittest.TestCase):
             self.assertFalse(
                 send_event(
                     "https://down.example/ingest",
-                    "alice",
                     "secret",
                     test_id="1",
                     action="x",
                 )
             )
-
-    def test_send_event_uses_only_password_when_username_empty(self) -> None:
-        """With no username, the Basic credential is just the password."""
-        captured: dict = {}
-
-        class FakeResponse:
-            status = 200
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *args):
-                return False
-
-            def read(self):
-                return b"{}"
-
-        def fake_open(request, timeout=None):
-            captured["headers"] = dict(request.header_items())
-            return FakeResponse()
-
-        import base64
-
-        with patch("app.events.urllib.request.urlopen", side_effect=fake_open):
-            send_event(
-                "https://events.example/ingest",
-                "",
-                "admin-secret",
-                test_id="001",
-                action="sign_in",
-            )
-
-        auth = captured["headers"]["Authorization"]
-        self.assertTrue(auth.startswith("Basic "))
-        decoded = base64.b64decode(auth.split(" ", 1)[1]).decode("utf-8")
-        self.assertEqual(decoded, "admin-secret")
-        self.assertNotIn(":", decoded)
 
 
 if __name__ == "__main__":

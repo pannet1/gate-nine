@@ -78,7 +78,6 @@ class PlanParsingTests(unittest.TestCase):
         from app.config import settings
 
         self.assertTrue(hasattr(settings, "events_url"))
-        self.assertTrue(hasattr(settings, "events_username"))
         self.assertTrue(hasattr(settings, "events_password"))
 
     def test_playwright_diagnostics_are_logged_with_active_step_context(self) -> None:
