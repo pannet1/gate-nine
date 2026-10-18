@@ -523,7 +523,6 @@ def _log(run_id: str, action: str, details: dict[str, Any] | None = None) -> Non
         return
     send_event(
         settings.events_url,
-        settings.events_username,
         settings.events_password,
         test_id=run_id,
         action=action,
