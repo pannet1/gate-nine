@@ -4,9 +4,7 @@ version = "0.1.0"
 description = "Human-supervised black-box functional testing harness for Rachis"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "fastapi>=0.115,<1.0",
   "pydantic-settings>=2.6,<3.0",
-  "uvicorn[standard]>=0.32,<1.0",
   "playwright>=1.48,<2.0",
 ]
 

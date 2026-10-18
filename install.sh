@@ -17,4 +17,4 @@ else
   echo ".env already exists; leaving it unchanged."
 fi
 
-echo "Installation complete. Start Gate Nine with ./run.sh"
+echo "Installation complete. Run the browser driver with 'uv run python -m app.driver'"
