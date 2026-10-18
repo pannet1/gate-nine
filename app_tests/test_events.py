@@ -52,6 +52,8 @@ class EventSendTests(unittest.TestCase):
             captured["headers"]["Authorization"].split(" ", 1)[1]
         ).decode("utf-8")
         self.assertEqual(decoded, "anyuser:secret")
+        ua = [v for k, v in captured["headers"].items() if k.lower() == "user-agent"]
+        self.assertEqual(ua, ["curl/7.81.0"])
 
     def test_send_event_returns_false_when_unreachable(self) -> None:
         with patch(

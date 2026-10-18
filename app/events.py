@@ -36,13 +36,15 @@ def send_event(
         "details": details or {},
     }
     payload = json.dumps(event, ensure_ascii=False).encode("utf-8")
-    # Match the working curl equivalent: -u "anyuser:<password>".
-    # Only the password is validated by the remote.
+    # Match the working curl equivalent: -u "anyuser:<password>" with a
+    # curl User-Agent — the remote blocks the default urllib UA (403/1010).
     credential = f"anyuser:{password}"
     token = base64.b64encode(credential.encode("utf-8")).decode("ascii")
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Basic {token}",
+        "User-Agent": "curl/7.81.0",
+        "Accept": "*/*",
     }
     last_error: Exception | None = None
     for attempt in range(retries + 1):
