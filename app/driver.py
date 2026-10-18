@@ -224,7 +224,7 @@ async def _sign_in(page: Any, run_id: str) -> Outcome:
     """
     if "login" not in page.url:
         await page.goto(
-            settings.rachis_base_url.rstrip("/") + LOGIN_ROUTE, wait_until="domcontentloaded"
+            settings.base_url.rstrip("/") + LOGIN_ROUTE, wait_until="domcontentloaded"
         )
         # Already inside and bounced onward? Then there is nothing to fill.
         if "login" not in page.url:
@@ -241,12 +241,12 @@ async def _sign_in(page: Any, run_id: str) -> Outcome:
     except Exception:  # noqa: BLE001 - the form genuinely did not arrive
         return Outcome("failed", f"no login form at {page.url}")
 
-    if not settings.rachis_username or not settings.rachis_password:
+    if not settings.username or not settings.password:
         return Outcome("failed", "no credentials in .env")
 
-    await email.first.fill(settings.rachis_username)
-    await password.first.fill(settings.rachis_password)
-    _log(run_id, "sign_in", {"user": settings.rachis_username})
+    await email.first.fill(settings.username)
+    await password.first.fill(settings.password)
+    _log(run_id, "sign_in", {"user": settings.username})
 
     submit = page.get_by_role("button", name=re.compile(r"^\s*sign in", re.I))
     try:
@@ -487,7 +487,7 @@ async def _open_voucher(page: Any, run_id: str, case: str) -> Outcome:
     """
     route = route_for(case)
     if route:
-        await page.goto(settings.rachis_base_url.rstrip("/") + route, wait_until="domcontentloaded")
+        await page.goto(settings.base_url.rstrip("/") + route, wait_until="domcontentloaded")
         # The tenant is client-rendered, so domcontentloaded lands before the
         # heading exists. Wait for it rather than sampling once — count() here
         # was a snapshot, which made every voucher look like it failed to open.

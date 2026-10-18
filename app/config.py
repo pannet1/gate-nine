@@ -2,11 +2,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    rachis_base_url: str = "https://rachis.co.in"
-    rachis_username: str = ""
-    rachis_password: str = ""
+    base_url: str = "https://rachis.co.in"
+    username: str = ""
+    password: str = ""
     headless: bool = False
-    # Remote FastAPI endpoint that receives every run event over HTTP Basic Auth.
+    # Remote event ingestion endpoint over HTTP Basic Auth.
     # When empty, events are not recorded anywhere — no local log is kept.
     events_url: str = ""
     events_username: str = ""
