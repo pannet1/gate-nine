@@ -253,8 +253,15 @@ needs and touches nothing else — a sibling case sitting flat is left for its o
 
 ### The case list lives in `cases.yml`
 
-Your interpretation of the brief is written to `test-cases/<run>/cases.yml`. The human may
-correct it afterwards, so **`cases.yml` wins over anything you inferred** and is never
+Your interpretation of the brief is written to `test-cases/<run>/cases.yml` — a plain list, one
+case name per line:
+
+```yaml
+- sales-invoice
+- good-receipt-note
+```
+
+The human may correct it afterwards, so **`cases.yml` wins over anything you inferred** and is never
 overwritten. **A correction there is not a discrepancy. Do not stop for it** — re-read the file
 and carry on.
 

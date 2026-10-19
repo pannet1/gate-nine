@@ -88,24 +88,33 @@ def read_run_cases(run_dir: Path) -> list[str]:
     there would list whatever happened to be lying around instead.
     """
     cases = read_cases(run_dir)
+    path = run_dir / "cases.yml"
     if cases is None:
+        if path.exists():
+            raise CannotRun(
+                f"{path} is not a list of case names.\n"
+                f"\n"
+                f"  It has to be one name per line:\n"
+                f"\n"
+                f"      - <case-name>\n"
+                f"      - <another-case>\n"
+            )
         brief = next(iter(sorted(run_dir.glob("*.md"))), None)
         where = f"{brief.name}" if brief else "none beside it"
         raise CannotRun(
-            f"{run_dir / 'cases.yml'} is missing — there is no list of cases to run.\n"
+            f"{path} is missing — there is no list of cases to run.\n"
             f"\n"
             f"  The names come from the brief ({where}). No command can infer them.\n"
             f"  Either write the file by hand:\n"
             f"\n"
-            f"      cases:\n"
-            f"        - <case-name>\n"
+            f"      - <case-name>\n"
             f"\n"
             f"  or ask the AI to read the brief and write it for you.\n"
             f"\n"
             f"  Then run this command again."
         )
     if not cases:
-        raise CannotRun(f"{run_dir / 'cases.yml'} lists no cases.")
+        raise CannotRun(f"{path} lists no cases.")
     return cases
 
 

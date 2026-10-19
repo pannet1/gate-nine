@@ -46,7 +46,7 @@ class Tree(unittest.TestCase):
             (run_dir / "brief.md").write_text("a brief\n", encoding="utf-8")
         if cases is not None:
             (run_dir / "cases.yml").write_text(
-                "cases:\n" + "".join(f"  - {c}\n" for c in cases), encoding="utf-8"
+                "\n".join(f"- {case}" for case in cases) + "\n", encoding="utf-8"
             )
         return run_dir
 

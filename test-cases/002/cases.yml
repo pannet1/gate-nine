@@ -1,5 +1,4 @@
 # Cases interpreted from the brief.
 # Correct this freely — the run reads this file in preference to
 # anything inferred, and never overwrites it.
-cases:
 - sales-invoice

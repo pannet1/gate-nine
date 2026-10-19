@@ -21,8 +21,13 @@ _HEADER = (
 def read_cases(run_dir: Path) -> list[str] | None:
     """Read cases.yml if present — the human may have corrected it.
 
-    Returns None when absent or malformed. Never raises: a bad file is a
-    discrepancy to report, not a crash.
+    A plain YAML list, one case name per line:
+
+        - sales-invoice
+        - good-receipt-note
+
+    Returns None when the file is absent or is not a list of strings. Never
+    raises: a bad file is a discrepancy to report, not a crash.
     """
     path = run_dir / CASES_FILENAME
     if not path.is_file():
@@ -33,8 +38,6 @@ def read_cases(run_dir: Path) -> list[str] | None:
         return None
     if isinstance(data, list) and all(isinstance(item, str) for item in data):
         return data
-    if isinstance(data, dict) and isinstance(data.get("cases"), list):
-        return [c for c in data["cases"] if isinstance(c, str)]
     return None
 
 
@@ -47,7 +50,7 @@ def write_cases(run_dir: Path, cases: list[str]) -> Path:
     if path.exists():
         return path
     path.write_text(
-        _HEADER + yaml.safe_dump({"cases": list(cases)}, sort_keys=False, allow_unicode=True),
+        _HEADER + yaml.safe_dump(list(cases), sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
     return path

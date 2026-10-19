@@ -10,6 +10,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import yaml
+
 from app.tidy import (
     AUTH_RELATIVE,
     case_folders,
@@ -592,12 +594,30 @@ class CasesYmlTests(TempTree):
         self.assertIn("attachments", text)
         self.assertIn("subtasks", text)
 
+    def test_it_is_written_as_a_plain_list(self) -> None:
+        """One name per line. No `cases:` wrapper — it buys nothing."""
+        run_dir = self.make_run()
+
+        write_cases(run_dir, ["attachments", "subtasks"])
+
+        text = (run_dir / "cases.yml").read_text(encoding="utf-8")
+        self.assertNotIn("cases:", text)
+        self.assertEqual(
+            yaml.safe_load(text), ["attachments", "subtasks"], "parses as a bare list"
+        )
+
+    def test_the_dict_form_is_rejected_not_guessed_at(self) -> None:
+        run_dir = self.make_run()
+        (run_dir / "cases.yml").write_text("cases:\n  - wrapped\n", encoding="utf-8")
+
+        self.assertIsNone(read_cases(run_dir), "one format, not two")
+
     def test_reading_returns_none_when_absent(self) -> None:
         self.assertIsNone(read_cases(self.make_run()))
 
     def test_an_existing_file_is_never_overwritten(self) -> None:
         run_dir = self.make_run()
-        (run_dir / "cases.yml").write_text("cases:\n  - human-picked\n", encoding="utf-8")
+        (run_dir / "cases.yml").write_text("- human-picked\n", encoding="utf-8")
 
         write_cases(run_dir, ["something-else"])
 
@@ -618,7 +638,7 @@ class CasesYmlTests(TempTree):
     def test_prepare_prefers_the_human_list_over_the_filesystem(self) -> None:
         run_dir = self.make_run()
         self.make_case("on-disk")
-        (run_dir / "cases.yml").write_text("cases:\n  - human-picked\n", encoding="utf-8")
+        (run_dir / "cases.yml").write_text("- human-picked\n", encoding="utf-8")
 
         report = prepare(runs_root=self.runs, recordings_dir=self.recordings)
 
@@ -753,7 +773,7 @@ class WorkspaceApiTests(TempTree):
     def test_cases_for_uses_the_human_list_when_present(self) -> None:
         run_dir = self.make_run("002")
         self.make_case("on-disk")
-        (run_dir / "cases.yml").write_text("cases:\n  - human-picked\n", encoding="utf-8")
+        (run_dir / "cases.yml").write_text("- human-picked\n", encoding="utf-8")
 
         self.assertEqual(Workspace(self.runs, self.recordings).cases_for("002"), ["human-picked"])
 
