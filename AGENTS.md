@@ -224,9 +224,26 @@ recordings/sales-invoice.py     ← a file, not a folder
 **Organising that is your job, not theirs to be told about.** `app.tidy` already does the
 mechanical part — do not hand-organise files by hand:
 
+Prefer the API when you are looping — it takes no paths and hands back a plain
+dict you can branch on:
+
+```python
+from app.tidy import Workspace
+
+ws = Workspace()                       # test-cases/ and recordings/
+report = ws.sync_run("002")
+report = ws.sync_case("effort-hours", "002")
+```
+
+The CLI is the same thing, for when a command is what you want:
+
 ```bash
 cd /home/pannet1/gate-nine && uv run python -m app.tidy sales-invoice 001
 ```
+
+Inside, `app/tidy/` is split by job — `cases.py` (the list), `files.py` (move,
+rename, auth path), `links.py` (symlinks), `session.py`, `workspace.py` (the
+interface above), `cli.py`. Import from `app.tidy`, not the modules.
 
 **You run this, once per case.** The human does not. Name the cases from the brief, then loop
 this over them in order until every rule is satisfied. It does everything that one case still

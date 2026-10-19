@@ -26,6 +26,7 @@ from app.tidy import (
     render_session,
     tidy_recordings,
     write_session,
+    Workspace,
 )
 
 
@@ -144,7 +145,7 @@ class NormaliseRecordingTests(TempTree):
         run_dir = self.make_run()
         case_dir = self.make_case("effort-hours")
         (case_dir / "effort-hours.py").rename(case_dir / "effort-hour.py")
-        link_case(run_dir, self.recordings, "effort-hours")
+        link_case(run_dir, "effort-hours")
 
         self.assertEqual(case_state(run_dir, "effort-hours"), "pending")
 
@@ -161,7 +162,7 @@ class LinkCaseTests(TempTree):
     def test_link_is_created_pointing_two_levels_up(self) -> None:
         self.make_case("subtasks")
 
-        result = link_case(self.run_dir, self.recordings, "subtasks")
+        result = link_case(self.run_dir, "subtasks")
 
         self.assertEqual(result, "created")
         link = self.run_dir / "subtasks"
@@ -172,15 +173,15 @@ class LinkCaseTests(TempTree):
     def test_linking_twice_changes_nothing(self) -> None:
         self.make_case("attachments")
 
-        self.assertEqual(link_case(self.run_dir, self.recordings, "attachments"), "created")
-        self.assertEqual(link_case(self.run_dir, self.recordings, "attachments"), "already-linked")
+        self.assertEqual(link_case(self.run_dir, "attachments"), "created")
+        self.assertEqual(link_case(self.run_dir, "attachments"), "already-linked")
 
     def test_wrong_target_is_repaired(self) -> None:
         self.make_case("dispatch")
         stale = self.run_dir / "dispatch"
         stale.symlink_to(Path("../../../elsewhere/dispatch"), target_is_directory=True)
 
-        result = link_case(self.run_dir, self.recordings, "dispatch")
+        result = link_case(self.run_dir, "dispatch")
 
         self.assertEqual(result, "repaired")
         self.assertEqual(Path(os.readlink(stale)), Path("../../recordings/dispatch"))
@@ -191,14 +192,14 @@ class LinkCaseTests(TempTree):
         squatter.mkdir()
         (squatter / "keep.txt").write_text("mine\n", encoding="utf-8")
 
-        result = link_case(self.run_dir, self.recordings, "reports")
+        result = link_case(self.run_dir, "reports")
 
         self.assertEqual(result, "skipped")
         self.assertFalse((self.run_dir / "reports").is_symlink())
         self.assertTrue((squatter / "keep.txt").is_file())
 
     def test_case_with_norecordings_folder_still_gets_a_link(self) -> None:
-        result = link_case(self.run_dir, self.recordings, "not-recorded-yet")
+        result = link_case(self.run_dir, "not-recorded-yet")
 
         self.assertEqual(result, "created")
         self.assertTrue((self.run_dir / "not-recorded-yet").is_symlink())
@@ -209,7 +210,7 @@ class LinkCaseTests(TempTree):
         self.make_case("one")
         self.make_case("two")
 
-        report = link_cases(self.run_dir, self.recordings, ["one", "two", "three"])
+        report = link_cases(self.run_dir, ["one", "two", "three"])
 
         self.assertEqual(report, {"one": "created", "two": "created", "three": "created"})
 
@@ -275,7 +276,7 @@ class PointRecordingAtAuthTests(TempTree):
         """The whole point: the recording must find the one auth file at run time."""
         (self.recordings / "auth.json").write_text("{}", encoding="utf-8")
         point_recording_at_auth(self.recordings, "subtasks")
-        link_case(self.run_dir, self.recordings, "subtasks")
+        link_case(self.run_dir, "subtasks")
 
         run_dir = os.path.realpath(self.run_dir / "subtasks")
         self.assertTrue(os.path.isfile(os.path.join(run_dir, AUTH_RELATIVE)))
@@ -331,7 +332,7 @@ class CaseStateTests(TempTree):
         run_dir = self.make_run()
         self.make_case("effort-hours")
 
-        link_case(run_dir, self.recordings, "effort-hours")
+        link_case(run_dir, "effort-hours")
 
         self.assertEqual(case_state(run_dir, "effort-hours"), "complete")
 
@@ -339,13 +340,13 @@ class CaseStateTests(TempTree):
         run_dir = self.make_run()
         (self.recordings / "sla-versions").mkdir()
 
-        link_case(run_dir, self.recordings, "sla-versions")
+        link_case(run_dir, "sla-versions")
 
         self.assertEqual(case_state(run_dir, "sla-versions"), "pending")
 
     def test_case_with_nothing_at_all_is_pending(self) -> None:
         run_dir = self.make_run()
-        link_case(run_dir, self.recordings, "ghost")
+        link_case(run_dir, "ghost")
 
         self.assertEqual(case_state(run_dir, "ghost"), "pending")
 
@@ -355,7 +356,7 @@ class SessionTests(TempTree):
         run_dir = self.make_run()
         self.make_case("done-case")
         self.make_case("todo-case", recording=False)
-        link_cases(run_dir, self.recordings, ["done-case", "todo-case"])
+        link_cases(run_dir, ["done-case", "todo-case"])
 
         text = render_session(
             run_dir,
@@ -370,7 +371,7 @@ class SessionTests(TempTree):
     def test_session_names_the_first_pending_case(self) -> None:
         run_dir = self.make_run()
         self.make_case("effort-hours", recording=False, url=False)
-        link_cases(run_dir, self.recordings, ["effort-hours"])
+        link_cases(run_dir, ["effort-hours"])
 
         text = render_session(run_dir, None, ["effort-hours"], self.recordings)
 
@@ -380,7 +381,7 @@ class SessionTests(TempTree):
         """The recording carries its URL in page.goto(); no url.txt is needed."""
         run_dir = self.make_run()
         self.make_case("effort-hours", url=False)
-        link_cases(run_dir, self.recordings, ["effort-hours"])
+        link_cases(run_dir, ["effort-hours"])
 
         text = render_session(run_dir, None, ["effort-hours"], self.recordings)
 
@@ -389,7 +390,7 @@ class SessionTests(TempTree):
     def test_session_does_not_claim_a_blocker_when_url_exists(self) -> None:
         run_dir = self.make_run()
         self.make_case("effort-hours")
-        link_cases(run_dir, self.recordings, ["effort-hours"])
+        link_cases(run_dir, ["effort-hours"])
 
         text = render_session(run_dir, None, ["effort-hours"], self.recordings)
 
@@ -398,7 +399,7 @@ class SessionTests(TempTree):
     def test_session_reports_done_when_nothing_is_pending(self) -> None:
         run_dir = self.make_run()
         self.make_case("all-done")
-        link_cases(run_dir, self.recordings, ["all-done"])
+        link_cases(run_dir, ["all-done"])
 
         text = render_session(run_dir, None, ["all-done"], self.recordings)
 
@@ -407,11 +408,11 @@ class SessionTests(TempTree):
     def test_write_session_replaces_rather_than_appends(self) -> None:
         run_dir = self.make_run()
         self.make_case("one")
-        link_cases(run_dir, self.recordings, ["one"])
+        link_cases(run_dir, ["one"])
         write_session(run_dir, None, ["one"], self.recordings)
 
         self.make_case("two")
-        link_cases(run_dir, self.recordings, ["one", "two"])
+        link_cases(run_dir, ["one", "two"])
         write_session(run_dir, None, ["one", "two"], self.recordings)
 
         text = (run_dir / "session.md").read_text(encoding="utf-8")
@@ -681,6 +682,90 @@ class StopSignalTests(TempTree):
         self.assertEqual(report["linked"], 2)
         self.assertEqual(report["missing_py"], ["ghost"])
         self.assertEqual(report["ask_url_for"], ["needs-url"])
+
+
+class WorkspaceApiTests(TempTree):
+    """The interface a main loop consumes — no loose paths, no internals."""
+
+    def test_it_defaults_to_the_repo_layout(self) -> None:
+        ws = Workspace()
+
+        self.assertEqual(str(ws.runs_root), "test-cases")
+        self.assertEqual(str(ws.recordings_dir), "recordings")
+
+    def test_sync_case_reports_the_three_ways(self) -> None:
+        self.make_run("002")
+        self.make_case("ready")
+        self.make_case("needs-url", url=False)
+
+        ws = Workspace(self.runs, self.recordings)
+        first = ws.sync_case("ready", "002")
+        second = ws.sync_case("needs-url", "002")
+
+        self.assertEqual(first["missing_py"], [])
+        self.assertEqual(first["ask_url_for"], [])
+        self.assertEqual(second["missing_py"], [])
+        self.assertEqual(second["ask_url_for"], ["needs-url"])
+
+    def test_sync_case_is_idempotent(self) -> None:
+        self.make_run("002")
+        self.make_case("subtasks")
+
+        ws = Workspace(self.runs, self.recordings)
+        first = ws.sync_case("subtasks", "002")
+        second = ws.sync_case("subtasks", "002")
+
+        self.assertEqual(first["linked"], "created")
+        self.assertEqual(second["linked"], "already-linked")
+
+    def test_sync_run_needs_nothing_but_a_run_id(self) -> None:
+        self.make_run("002")
+        self.make_case("subtasks")
+
+        ws = Workspace(self.runs, self.recordings)
+        report = ws.sync_run("002")
+
+        self.assertEqual(report["linked"], 1)
+        self.assertEqual(report["missing_py"], [])
+
+    def test_sync_run_defaults_to_the_latest_run(self) -> None:
+        self.make_run("001")
+        self.make_run("003")
+        self.make_case("subtasks")
+
+        report = Workspace(self.runs, self.recordings).sync_run()
+
+        self.assertEqual(report["run_id"], "003")
+        self.assertTrue((self.runs / "003" / "subtasks").is_symlink())
+
+    def test_sync_run_on_no_runs_at_all(self) -> None:
+        report = Workspace(self.runs / "elsewhere", self.recordings).sync_run()
+
+        self.assertEqual(report["action"], "no-run")
+
+    def test_sync_case_on_unknown_run(self) -> None:
+        self.make_run("002")
+
+        report = Workspace(self.runs, self.recordings).sync_case("subtasks", "099")
+
+        self.assertEqual(report["action"], "no-such-run")
+
+    def test_cases_for_uses_the_human_list_when_present(self) -> None:
+        run_dir = self.make_run("002")
+        self.make_case("on-disk")
+        (run_dir / "cases.yml").write_text("cases:\n  - human-picked\n", encoding="utf-8")
+
+        self.assertEqual(Workspace(self.runs, self.recordings).cases_for("002"), ["human-picked"])
+
+    def test_dry_run_through_the_workspace_changes_nothing(self) -> None:
+        self.make_run("002")
+        (self.recordings / "lazy.py").write_text("# a\n", encoding="utf-8")
+
+        report = Workspace(self.runs, self.recordings).sync_run("002", dry_run=True)
+
+        self.assertTrue(report["dry_run"])
+        self.assertTrue((self.recordings / "lazy.py").is_file())
+        self.assertFalse((self.runs / "002" / "lazy").exists())
 
 
 if __name__ == "__main__":
