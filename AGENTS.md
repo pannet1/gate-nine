@@ -98,6 +98,9 @@ handoff is also written down.
 **Where:** `test-cases/<run>/<case>/session.md`. Create the case folder if it does not exist
 yet.
 
+**This rule governs `session.md` and nothing else.** How every other file is treated is
+unchanged.
+
 **Update, never append.** If one is already there, read it, then rewrite it to the current
 state. **History is not wanted.** A cold agent needs to know where things stand, not read a
 diary of how they got there.
