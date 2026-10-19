@@ -26,17 +26,22 @@ Run this loop. Never skip a step. Never improvise past a handoff.
 1. SCAN      find the highest-numbered folder under test-cases/
 2. BRIEF     locate the .md brief inside it
              └─ no brief? → STOP. Tell the human. Do nothing else.
-3. TRANSLATE turn the brief into a human workflow helper (index.html)
-4. SHOW      open that helper in the browser
-5. NARRATE   keep telling the user what you are doing, as you do it
-6. CHECK     is the next step doable by you alone?
-             ├─ yes → do it, then return to 6
-             └─ no  → go to 7
-7. HAND OFF  7a. CLOSE THE BROWSER
-             7b. state the exact shell command the human should run
-             7c. WAIT. Do not continue until the human reports back.
-8. LOOP      when every test passes, the loop breaks. Stop and report.
+3. READ      read the brief and work out what it actually asks for
+4. INFORM    tell the user what you found and what you are doing —
+             in the harness, in your reply. Not in a generated document.
+5. CHECK     is the next step doable by you alone?
+             ├─ yes → do it, then return to 5
+             └─ no  → go to 6
+6. HAND OFF  6a. close any browser you opened
+             6b. state the exact shell command the human should run
+             6c. say what you expect from it
+             6d. WAIT. Do not continue until the human reports back.
+7. LOOP      when every test passes, the loop breaks. Stop and report.
 ```
+
+**Never generate a workflow document.** Do not write `index.html`, a README, or any other
+summary of the brief into the repo. The brief is already a document; the run folder is
+already the record. Your reply is the update.
 
 ### 2.1 Scan
 The run folder is the unit of work. A human creates it; you only ever read it. Never create,
@@ -47,20 +52,23 @@ number that exists.
 The brief is a single `.md` file. **Its filename is free** — `notes.md`, `header-fields.md`,
 anything the author chose. Only the extension matters. Do not ask the human to rename it.
 
-### 2.3 Translate
-Turn the brief into a workflow helper a human can read at a glance: what gets tested, in what
-order, what is already known-broken so nobody re-files it, and what is *not* built so nobody
-wastes time hunting for it.
+### 2.3 Read
+Work out what the brief actually asks for: what gets tested, in what order, what is already
+known-broken so nobody re-files it, and what is *not* built so nobody wastes time hunting.
 
-Two hard rules when translating:
+Two hard rules when reading it:
 
-- **Never invent a test.** Every entry traces back to something in the brief.
+- **Never invent a test.** Every item you raise traces back to something in the brief.
 - **Never lose a "do not test" or "known gap" note.** Those lines exist so the human does not
-  file correct behaviour as a bug. Dropping them is a real failure.
+  file correct behaviour as a bug. Dropping them in your summary is a real failure.
 
-### 2.4 Show and narrate
-Open the helper in the browser. The user is watching. Tell them what you are doing *while you
-do it* — not afterwards. Silence is a failure mode.
+### 2.4 Inform
+Tell the user what you found and what you are doing **in your reply, as you go**. Not in a file
+you generate, not in a browser you open. The user is reading the harness. Silence is a failure
+mode.
+
+When you summarise a brief, surface the not-built items and the known bugs first — they are the
+ones that prevent wasted work and duplicate reports.
 
 ### 2.5 Hand off
 This is the discipline the whole harness rests on.
