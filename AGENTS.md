@@ -157,27 +157,48 @@ never travels with the repo — each machine generates its own.
 ### 4.2 Record a test — human drives, machine records
 The human drives the browser. You cannot. This is a handoff.
 
-**Every case gets its own folder.** Each holds the real URL, the recording, and the evidence
-screenshot:
+**The recording is written once, in `_template/`.** It is canonical and shared across every run:
+
+```
+_template/<case>.py          # the recording — written by the human, once
+```
+
+**You soft-link it into the run, not copy it:**
+
+```
+test-cases/<run>/<case>/<case>.py -> ../../../_template/<case>.py
+```
+
+Three levels up from `test-cases/<run>/<case>/` reaches the project root.
+
+**Why a link and not a copy.** A copy means the human records the same case again for the next
+run, and the two copies drift. A link means one recording serves every run: re-record it once
+and every run picks up the new version. No duplicated work, nothing stale.
+
+A symlink also keeps the "is this case complete?" check honest — it is the existence of
+`<run>/<case>/<case>.py` that answers it, whether that is a link or a file.
+
+**Each run folder still holds what is genuinely per-run:**
 
 ```
 test-cases/<run>/<case>/
-├── url.txt          # the real URL — never guessed, never assumed
-├── <case>.py        # the recording
-└── screenshot.png   # evidence — this name never changes
+├── url.txt                  # the real URL — never guessed, never assumed
+├── <case>.py -> ../../../_template/<case>.py
+└── screenshot.png           # evidence — this name never changes
 ```
 
 `url.txt` exists because you will not know the real route. Do not infer it from a pattern, do
 not reuse another case's URL, do not fall back to the base URL. If `url.txt` is missing, the
 URL is unknown and the step cannot proceed — ask the human for it.
 
-**Recording command** — the URL comes from `url.txt`:
+**Recording command** — the human records into `_template/`, and the URL comes from `url.txt`:
 
 ```bash
-uv run playwright codegen --load-storage=test-cases/<run>/auth.json -o test-cases/<run>/<case>/<case>.py "$(cat test-cases/<run>/<case>/url.txt)"
+uv run playwright codegen --load-storage=test-cases/<run>/auth.json -o _template/<case>.py "$(cat test-cases/<run>/<case>/url.txt)"
 ```
 
-The human clicks through the flow. Every action is captured.
+The human clicks through the flow. Every action is captured. Then you create the symlink and
+append the screenshot line (§4.3).
 
 ### 4.3 Append the screenshot line — your job, after recording
 
