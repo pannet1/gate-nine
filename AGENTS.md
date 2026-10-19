@@ -213,20 +213,24 @@ into `_template/`, flat:
 _template/sales-invoice.py     ← a file, not a folder
 ```
 
-**Organising that is your job, not theirs to be told about.** On every pass, look for loose
-`<case>.py` files sitting in `_template/` and give each one its folder:
+**Organising that is your job, not theirs to be told about.** `app.tidy` already does the
+mechanical part — do not hand-organise files by hand:
 
 ```bash
-mkdir -p _template/sales-invoice
-mv _template/sales-invoice.py _template/sales-invoice/sales-invoice.py
+cd /home/pannet1/gate-nine && uv run python -m app.tidy --dry-run   # report only
+cd /home/pannet1/gate-nine && uv run python -m app.tidy             # tidy, link, report
 ```
 
-The filename is the case name. Do not ask the human to rename it, do not reject the work, do
-not make them record it again. Tidy it yourself, then carry on to the symlink.
+It gives every loose `_template/<case>.py` its folder, symlinks each case folder into the
+run, writes `session.md`, and reports what it did. It is idempotent — a second pass reports
+`already-linked` and changes nothing. `--dry-run` reports without touching disk.
 
-Apply the same judgement to anything else left flat — a stray `auth.json`, a `url.txt` dropped
-in the wrong place. Move it to where the layout expects it and continue. Only stop and ask
-when you genuinely cannot tell what something is.
+The filename is the case name. Do not ask the human to rename it, do not reject the work, do
+not make them record it again. Tidy it yourself, then carry on.
+
+`tidy` refuses to overwrite: a real directory sitting where a link belongs is reported as
+`skipped` and left alone. Only stop and ask the human when you genuinely cannot tell what
+something is.
 
 ### 4.4 Append the screenshot line — your job, after recording
 
