@@ -82,16 +82,27 @@ def resolve_run(runs_root: Path, run_id: str | None = None) -> Path:
 def read_run_cases(run_dir: Path) -> list[str]:
     """The cases to run, read from cases.yml.
 
-    Absent or empty is fatal. Deriving a list from the filesystem instead would
-    run whatever happened to be lying around, which is how the wrong case gets
-    tested against the wrong brief.
+    Absent or empty is fatal, and no command is offered to fix it. The names
+    come from reading the brief, which is a judgement no code in this repo
+    makes — app.tidy seeds cases.yml from the recordings on disk, so pointing
+    there would list whatever happened to be lying around instead.
     """
     cases = read_cases(run_dir)
     if cases is None:
+        brief = next(iter(sorted(run_dir.glob("*.md"))), None)
+        where = f"{brief.name}" if brief else "none beside it"
         raise CannotRun(
             f"{run_dir / 'cases.yml'} is missing — there is no list of cases to run.\n"
-            f"  Write it, or let the AI interpret the brief into it:\n"
-            f"      cd /home/pannet1/gate-nine && uv run python -m app.tidy --run-id {run_dir.name}"
+            f"\n"
+            f"  The names come from the brief ({where}). No command can infer them.\n"
+            f"  Either write the file by hand:\n"
+            f"\n"
+            f"      cases:\n"
+            f"        - <case-name>\n"
+            f"\n"
+            f"  or ask the AI to read the brief and write it for you.\n"
+            f"\n"
+            f"  Then run this command again."
         )
     if not cases:
         raise CannotRun(f"{run_dir / 'cases.yml'} lists no cases.")

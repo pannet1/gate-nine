@@ -107,6 +107,18 @@ class CasesYmlTests(Tree):
         with self.assertRaises(CannotRun):
             read_run_cases(run_dir)
 
+    def test_the_message_never_points_at_a_command_that_cannot_help(self) -> None:
+        """app.tidy seeds cases.yml from disk. It cannot read a brief."""
+        run_dir = self.make_run("002", cases=None)
+
+        with self.assertRaises(CannotRun) as caught:
+            read_run_cases(run_dir)
+        message = str(caught.exception)
+
+        self.assertNotIn("app.tidy", message)
+        self.assertNotIn("playwright", message)
+        self.assertIn("brief", message)
+
     def test_an_empty_list_is_fatal(self) -> None:
         run_dir = self.make_run("002", cases=[])
 
