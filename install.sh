@@ -17,4 +17,4 @@ else
   echo ".env already exists; leaving it unchanged."
 fi
 
-echo "Installation complete. Run the browser driver with 'uv run python -m app.driver'"
+echo "Installation complete. Run the tests with 'uv run main'."

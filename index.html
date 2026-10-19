@@ -1,401 +1,730 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Gate Nine — Single Point of Reference</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; max-width: 900px; }
-        h1, h2, h3 { color: #333; }
-        h2 { border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 32px; }
-        table { border-collapse: collapse; width: 100%; margin: 12px 0; }
-        th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; vertical-align: top; }
-        th { background: #f2f2f2; }
-        code, pre { background: #f5f5f5; font-family: Consolas, monospace; }
-        pre { padding: 10px; overflow-x: auto; border: 1px solid #ddd; }
-        .note { background: #fffbe6; border: 1px solid #e6d98a; padding: 10px; }
-    </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate Nine: single point of reference</title>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link rel="preconnect" href="https://cdn.fontshare.com" crossorigin>
+<link href="https://api.fontshare.com/v2/css?f[]=roundo@400,500,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#cbe4f2;
+  --surface:#bcdcee;
+  --ink:#0a0a0a;
+  --muted:#44606e;
+  --accent:#b0298f;
+  --accent-ink:#ffffff;
+  --field-1:#cbe4f2;  --field-1-ink:#0a0a0a;
+  --field-2:#f1e3b5;  --field-2-ink:#0a0a0a;
+  --field-3:#ffc013;  --field-3-ink:#0a0a0a;
+  --field-4:#0a0a0a;  --field-4-ink:#f2f2f2;
+
+  --step-small:clamp(1rem,0.96rem + 0.2vw,1.125rem);
+  --step-body:clamp(1.0625rem,1rem + 0.25vw,1.1875rem);
+  --step-lead:clamp(1.25rem,1.1rem + 0.7vw,1.625rem);
+  --step-head:clamp(2rem,1.3rem + 3.2vw,4rem);
+  --step-display:clamp(3.5rem,9vw,9.5rem);
+
+  --radius:8px;
+  --margin:24px;
+  --gap:8px;
+  --ease:cubic-bezier(.2,.7,.3,1);
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:88px}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:"Roundo",system-ui,sans-serif;
+  font-size:var(--step-body);
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+
+.wrap{max-width:1180px;margin:0 auto;padding:0 var(--margin)}
+section{padding:clamp(96px,14vh,200px) 0}
+h1,h2,h3{margin:0;font-weight:500;letter-spacing:-0.025em;line-height:1.05}
+h2{font-size:var(--step-head);max-width:22ch}
+h3{font-size:var(--step-lead);letter-spacing:-0.015em;line-height:1.2}
+p{margin:0 0 1.1em;max-width:62ch}
+p:last-child{margin-bottom:0}
+a{color:inherit}
+
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.88em}
+p code,li code,td code,h3 code{background:var(--surface);padding:.1em .35em;border-radius:4px}
+
+pre{
+  margin:0;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+  font-size:var(--step-small);
+  line-height:1.6;
+  overflow-x:auto;
+}
+pre code{background:none;padding:0}
+
+.lead{font-size:var(--step-lead);line-height:1.35;letter-spacing:-0.01em;max-width:56ch}
+.muted{color:var(--muted)}
+.support{font-size:var(--step-body);color:var(--muted);max-width:56ch}
+
+/* ---------- nav ---------- */
+.nav{
+  position:sticky;top:0;z-index:50;
+  background:var(--field-4);color:var(--field-4-ink);
+}
+.nav .wrap{display:flex;align-items:center;gap:28px;height:56px}
+.mark{font-weight:600;letter-spacing:-0.02em;font-size:17px;margin-right:auto}
+.nav a{text-decoration:none;font-size:15px;opacity:.7;padding:6px 0;transition:opacity .18s var(--ease)}
+.nav a:hover,.nav a:focus-visible{opacity:1}
+
+/* ---------- buttons ---------- */
+.btn{
+  display:inline-block;text-decoration:none;
+  background:var(--accent);color:var(--accent-ink);
+  font-family:inherit;font-size:var(--step-body);font-weight:500;
+  padding:16px 28px;border:0;border-radius:var(--radius) var(--radius) 0 0;
+  cursor:pointer;transition:transform .18s var(--ease),filter .18s var(--ease);
+}
+.btn:hover,.btn:focus-visible{transform:translateY(-2px);filter:brightness(1.08)}
+.btn-quiet{background:var(--field-4-ink);color:var(--field-4)}
+.btn-quiet:hover,.btn-quiet:focus-visible{background:#fff}
+
+:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+
+/* ---------- hero ---------- */
+.hero{background:var(--field-4);color:var(--field-4-ink);padding:0 0 0;overflow:hidden}
+.hero .top{padding-top:clamp(48px,9vh,110px)}
+.hero h1{font-size:var(--step-display);letter-spacing:-0.045em;line-height:.92}
+.hero .lead{color:#d6e3ea;margin-top:28px}
+.hero .hero-actions{margin-top:32px;display:flex;gap:14px;flex-wrap:wrap}
+
+/* folder stack: the motif */
+.stack{position:relative;margin:clamp(44px,6vh,76px) 0 clamp(90px,13vh,160px)}
+.folder{
+  position:relative;display:block;text-decoration:none;
+  width:86%;margin:0 auto 9px;height:54px;
+  border-radius:var(--radius) var(--radius) 0 0;
+  transition:transform .22s var(--ease),filter .22s var(--ease);
+}
+a.folder:hover{transform:translateX(16px);filter:brightness(1.06)}
+.folder.open{height:auto;min-height:390px;margin:16px 0 0}
+.folder .tab{
+  position:absolute;top:-38px;
+  width:230px;height:38px;
+  display:flex;align-items:center;padding:0 18px;
+  font-size:var(--step-body);font-weight:500;
+  clip-path:polygon(0 100%,0 30%,9% 0,91% 0,100% 30%,100% 100%);
+  border-radius:var(--radius) var(--radius) 0 0;
+}
+.folder .body{padding:42px 36px 50px}
+.folder .body h3{margin-bottom:10px}
+.folder .body p{font-size:var(--step-body);max-width:52ch}
+.folder .body p a{color:inherit;text-decoration:none;transition:opacity .18s var(--ease)}
+.folder .body p a:hover{opacity:.7}
+.f1{background:var(--field-1);color:var(--field-1-ink)}
+.f1 .tab{background:var(--field-3);color:var(--field-3-ink)}
+.f2{background:var(--field-2);color:var(--field-2-ink)}
+.f2 .tab{background:var(--field-4);color:var(--field-4-ink)}
+.f3{background:var(--field-1);color:var(--field-1-ink)}
+.f3 .tab{background:var(--accent);color:var(--accent-ink)}
+.f4{background:var(--field-2);color:var(--field-2-ink)}
+.f4 .tab{background:var(--field-4);color:var(--field-4-ink)}
+.f5{background:var(--field-2);color:var(--field-2-ink)}
+.f5 .tab{background:var(--field-4);color:var(--field-4-ink)}
+
+/* ---------- intro ---------- */
+.intro{background:var(--field-2);color:var(--field-2-ink)}
+.intro .statement{
+  font-size:clamp(1.4rem,2.3vw,2.15rem);font-weight:500;letter-spacing:-0.02em;
+  line-height:1.28;max-width:30ch;margin:0;
+}
+
+/* ---------- about: inset panel ---------- */
+.about{background:var(--bg);padding:0}
+.panel{
+  margin:0 var(--margin);
+  background:var(--field-4);color:var(--field-4-ink);
+  border-radius:var(--radius);
+  padding:clamp(36px,5vw,68px);
+  display:grid;grid-template-columns:1fr 1fr;gap:clamp(36px,5vw,72px);
+  align-items:start;
+}
+.panel h2{color:#fff;max-width:16ch;margin-bottom:22px}
+.panel h3{color:var(--field-3);font-size:1.05rem;margin-bottom:8px}
+.panel p{font-size:var(--step-small);color:#cdd8de;max-width:46ch}
+.panel ul{margin:0;padding:0;list-style:none}
+.panel li{padding:15px 0;font-size:var(--step-small);color:#e6eef2}
+.panel li b{color:#fff;font-weight:500}
+.panel code,.panel p code{background:#2b2b2b;color:#ffe9a8}
+
+/* terminal fragment: the product's own picture */
+.term{
+  background:#111;color:#d7d7d7;border-radius:var(--radius);
+  padding:0;overflow:hidden;font-size:var(--step-small);line-height:1.65;
+}
+.term .bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#1c1c1c}
+.term .bar i{width:11px;height:11px;border-radius:50%;background:#3a3a3a}
+.term .bar i:first-child{background:var(--field-3)}
+.term .bar b{margin-left:10px;font-weight:400;color:#9aa5ac;font-size:13px}
+.term .out{margin:0;padding:16px 14px 18px;overflow-x:auto;font-size:inherit;line-height:inherit}
+.term .ok{color:#7ee787}
+.term .no{color:#ff9d9d}
+.term .dim{color:#6e7681}
+.term .warn{color:var(--field-3)}
+
+/* ---------- loop: stages bar ---------- */
+.loop{background:var(--field-1);color:var(--field-1-ink)}
+.bar{
+  margin-top:64px;display:flex;gap:var(--gap);
+  height:22vh;min-height:190px;
+}
+.bar .seg{
+  padding:20px;display:flex;flex-direction:column;justify-content:space-between;
+  border-radius:var(--radius);overflow:hidden;min-width:0;
+}
+.bar .seg .dur{font-size:clamp(20px,2vw,30px);letter-spacing:-0.02em;line-height:1.1}
+.bar .seg .what{font-size:var(--step-small);max-width:20ch;line-height:1.35}
+.b1{background:var(--surface);flex-grow:1}
+.b2{background:var(--surface);flex-grow:1}
+.b3{background:var(--field-2);flex-grow:2}
+.b4{background:var(--field-3);flex-grow:9}
+.b5{background:var(--field-4);color:var(--field-4-ink);flex-grow:5}
+
+.exits{margin-top:56px;display:grid;grid-template-columns:repeat(3,1fr);gap:var(--gap)}
+.exits div{background:var(--bg);border-radius:var(--radius);padding:22px}
+.exits b{display:block;font-size:1.35rem;margin-bottom:6px}
+.exits b code{background:none;padding:0;font-size:1em}
+.exits span{font-size:var(--step-small);color:var(--muted);max-width:30ch;display:block}
+
+/* ---------- never: poster ---------- */
+.never{background:var(--field-4);color:var(--field-4-ink)}
+.word{
+  font-size:clamp(1.9rem,4.4vw,3.8rem);font-weight:500;
+  letter-spacing:-0.038em;line-height:1.04;
+  padding:7px 0;margin:0;transition:color .18s var(--ease);
+}
+.word a{text-decoration:none;transition:color .18s var(--ease)}
+.word:hover a{color:var(--field-3)}
+.why-list{
+  list-style:none;margin:clamp(48px,7vh,88px) 0 0;padding:0;
+  columns:2;column-gap:56px;
+}
+.why-list li{break-inside:avoid;margin-bottom:22px;font-size:var(--step-body);color:#a9c0cb;max-width:46ch}
+.why-list b{color:#fff;font-weight:500}
+.why-list code{background:#242424;color:#ffe9a8}
+
+/* ---------- showcase: full bleed ---------- */
+.record{background:var(--field-2);color:var(--field-2-ink);padding:0;overflow:hidden}
+.record .inner{min-height:92svh;padding:clamp(56px,8vh,110px) 0;display:grid;grid-template-columns:1fr 1.15fr;gap:clamp(36px,5vw,80px);align-items:center}
+.record h2{max-width:14ch}
+.record p{font-size:var(--step-body);max-width:40ch}
+.spec{display:grid;gap:0;margin-top:34px}
+.spec div{padding:17px 0}
+.spec b{display:block;font-weight:500;margin-bottom:3px}
+.spec span{font-size:var(--step-small);color:#6b5c28}
+
+/* ---------- modules ---------- */
+.modules{background:var(--bg)}
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap);margin-top:56px}
+.tile{
+  background:var(--surface);border-radius:var(--radius);padding:24px;
+  min-height:150px;display:flex;flex-direction:column;gap:8px;
+}
+.tile .t{font-size:var(--step-small);font-weight:600;word-break:break-word;line-height:1.35}
+.tile .t code{background:none;padding:0}
+.tile .d{font-size:var(--step-small);color:var(--muted);line-height:1.45;max-width:34ch}
+.tile.lead{grid-column:span 2;background:var(--field-4);color:var(--field-4-ink);justify-content:flex-end;padding:28px}
+.tile.lead .t{font-size:clamp(1.6rem,3vw,2.6rem);letter-spacing:-0.03em;font-family:"Roundo",sans-serif;font-weight:500}
+.tile.lead .d{color:#a9b7bf}
+.tile.dead{background:var(--surface)}
+.tile.dead .d{color:#7d8b93}
+.tile.dead .t::after{content:" · superseded";font-family:"Roundo",sans-serif;font-weight:400;color:var(--muted)}
+
+/* ---------- open items: the drawer ---------- */
+.open{background:var(--field-1);color:var(--field-1-ink)}
+.drawer{position:relative;margin-top:72px;padding-bottom:24px}
+.card{
+  position:relative;margin-top:40px;border-radius:var(--radius);
+  border-radius:var(--radius) var(--radius) 0 0;padding:0;
+}
+.card:first-child{margin-top:0}
+.card .tab{
+  position:absolute;top:-36px;height:36px;width:230px;
+  display:flex;align-items:center;padding:0 18px;
+  font-size:var(--step-small);font-weight:500;
+  clip-path:polygon(0 100%,0 28%,7% 0,93% 0,100% 28%,100% 100%);
+}
+.card .q{
+  padding:24px 28px 22px;font-size:var(--step-lead);letter-spacing:-0.02em;
+  cursor:pointer;display:flex;justify-content:space-between;gap:20px;align-items:baseline;
+  border:0;background:none;font-family:inherit;color:inherit;text-align:left;width:100%;
+}
+.card .q:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.card .mark{flex-shrink:0;font-size:var(--step-small)}
+.card .a{
+  padding:0 28px 32px;max-width:58ch;color:rgba(10,10,10,.78);font-size:var(--step-body);
+}
+.card[hidden]{display:none}
+.card.shut .a{display:none}
+.k1 .tab{background:var(--field-4);color:var(--field-4-ink)}
+.k2 .tab{background:var(--field-3);color:var(--field-3-ink)}
+.k3 .tab{background:var(--field-4);color:var(--field-4-ink)}
+.k4 .tab{background:var(--field-3);color:var(--field-3-ink)}
+.k1,.k2{background:var(--field-2)}
+.k3,.k4{background:var(--surface)}
+
+/* ---------- footer ---------- */
+.foot{background:var(--field-4);color:var(--field-4-ink);padding:clamp(72px,10vh,140px) 0 56px}
+.blocks{display:flex;gap:4px;align-items:flex-end;height:26svh;min-height:180px;margin-bottom:56px}
+.blocks span{
+  flex:1;background:var(--field-3);border-radius:var(--radius) var(--radius) 0 0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:clamp(1rem,2.6vw,2.2rem);font-weight:600;color:var(--field-3-ink);
+  overflow:hidden;
+}
+.foot .cols{display:grid;grid-template-columns:2fr 1fr 1fr;gap:32px;font-size:var(--step-small)}
+.foot h4{font-size:var(--step-small);font-weight:500;color:#8f9aa1;margin:0 0 12px;letter-spacing:0;text-transform:none}
+.foot ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.foot a{color:#dbe4e9;text-decoration:none;transition:color .18s var(--ease)}
+.foot a:hover{color:var(--field-3)}
+.foot .base{margin-top:56px;padding-top:24px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font-size:var(--step-small);color:#8f9aa1}
+
+/* ---------- motion ---------- */
+.reveal{opacity:0;transform:translateY(26px)}
+.reveal.in{opacity:1;transform:none;transition:opacity .62s var(--ease),transform .62s var(--ease)}
+@media (prefers-reduced-motion:reduce){
+  .reveal{opacity:1;transform:none}
+  .reveal.in{transition:none}
+  .btn:hover,.btn:focus-visible{transform:none}
+  .word:hover a{color:inherit}
+}
+.folder.shutter{clip-path:inset(0 0 0 100%);transition:clip-path 1.05s var(--ease)}
+.folder.shutter.open{clip-path:inset(0 0 0 0)}
+
+/* ---------- narrow ---------- */
+@media (max-width:1000px){
+  .panel,.record .inner{grid-template-columns:1fr}
+  .bar{height:auto;flex-direction:column;min-height:0}
+  .bar .seg{min-height:104px}
+  .tiles{grid-template-columns:repeat(2,1fr)}
+  .tile.lead{grid-column:span 2}
+  .exits{grid-template-columns:1fr}
+  .foot .cols{grid-template-columns:1fr 1fr}
+  .word{font-size:clamp(1.75rem,7vw,3rem)}
+  .why-list{columns:1}
+  .folder{width:100%}
+}
+@media (max-width:600px){
+  :root{--margin:16px}
+  .tiles{grid-template-columns:1fr}
+  .tile.lead{grid-column:span 1}
+  .foot .cols{grid-template-columns:1fr}
+  .blocks{height:20svh}
+  .folder .body{padding:30px 22px 38px}
+  .card{margin-top:34px}
+  .card .q{padding:20px;font-size:1.02rem}
+  .card .a{padding:0 20px 24px}
+  .nav .wrap{gap:16px;height:52px}
+  .nav a{display:none}
+}
+</style>
 </head>
 <body>
 
-<h1>Gate Nine — Single point of reference</h1>
-<p><strong>Last updated:</strong> 2026-10-18</p>
-<p>This page is the one place the team follows for how this project is designed and
-how it grows. It records the control flow and the conventions around it — not what to
-test or how to test. The brief is the source of what to test; the how lives in the recorded
-<code>&lt;case&gt;.py</code> inside the run folder. Update this page in the same change that
-moves the design forward.</p>
+<nav class="nav">
+  <div class="wrap">
+    <span class="mark">Gate Nine</span>
+    <a href="#loop">The loop</a>
+    <a href="#never">Never</a>
+    <a href="#recording">Recording</a>
+    <a href="#modules">Modules</a>
+    <a href="#open">Open items</a>
+  </div>
+</nav>
 
-<h2>1. Aim &amp; System Boundary</h2>
-<p><strong>To see the browser entering data.</strong> Everything in this project is geared
-toward that one thing — watching Chromium open, watching fields get filled, and being able
-to step in and fix what looks wrong.</p>
-<p>Rachis arrives already tested vigorously — around 1000 runs — before it lands here. Bug
-hunting is not this harness's job. Its job is visibility, so that Murugan and Jashveer can
-watch data being entered in real time (<code>docs/DESIGN.md</code>: "run the tests and see
-the browsers being opened up and fields entered").</p>
-<p>Rachis stays an external black-box system — no source code, no internal APIs, no
-database access. A human writes the brief, a human approves it, and a human decides what
-they saw.</p>
-<p class="note">Consequence for design: <strong>never headless.</strong> A loop that hides
-the window defeats the only purpose of the project. Any change that makes data entry less
-observable is the wrong change.</p>
+<header class="hero">
+  <div class="wrap top">
+    <h1>Gate Nine</h1>
+    <p class="lead">A testing harness for rachis.co.in whose only job is to make a browser
+      visible while it enters data, so a person can watch and judge.</p>
+    <div class="hero-actions">
+      <a class="btn" href="#loop">Read the loop</a>
+      <a class="btn btn-quiet" href="#open">What is unfinished</a>
+    </div>
+  </div>
 
-<fieldset>
-    <legend><strong>Core Architectural Principles</strong></legend>
-    <ul>
-        <li><strong>Rachis is an External Black-Box:</strong> <code>https://rachis.co.in</code> is an external system with no source code access, no internal APIs, and no direct database connections. This repository owns only test definitions, browser execution, evidence, and diagnostic reporting.</li>
-        <li><strong>Visible Browser at All Times:</strong> The browser runner is <strong>never headless</strong> (<code>HEADLESS = False</code>). Gate Nine's core purpose is visibility — allowing human stakeholders (Murugan, Jashveer, Karthick) to watch data entry live in Chromium.</li>
-        <li><strong>Observation Pacing:</strong> A fixed delay (<code>STEP_DELAY = 3s</code>) between actions allows human eyes to follow inputs before subsequent operations execute.</li>
-        <li><strong>Human Governance:</strong> An AI model never marks a run as passed. Human testers own the final PASS/FAIL decision, and the runner only creates or drafts vouchers authorized by a human-approved test brief.</li>
+  <div class="stack" id="sections">
+    <a class="folder f1 reveal" href="#loop"><span class="tab">The loop</span></a>
+    <a class="folder f2 reveal" href="#never"><span class="tab">Never</span></a>
+    <a class="folder f3 reveal" href="#recording"><span class="tab">Recording</span></a>
+    <a class="folder f4 reveal" href="#modules"><span class="tab">Modules</span></a>
+    <a class="folder f5 reveal" href="#open"><span class="tab">Open items</span></a>
+    <div class="folder f5 open reveal">
+      <span class="tab">Where it stands</span>
+      <div class="body">
+        <h3>What is not finished</h3>
+        <p>Run 002 still names run 001's case, so the loop opens a browser on the wrong form. The only
+          recording in the repo is three exploratory clicks with no form fill and no submit, so it can
+          never pass. Two modules still point at a plan file that no longer exists.</p>
+        <p><a class="open-link" href="#open">Read the open items</a></p>
+      </div>
+    </div>
+  </div>
+</header>
+
+<section class="intro">
+  <div class="wrap">
+    <p class="statement">Rachis has already been tested a thousand times. This is not a bug hunt.
+      It is for watching, and for stopping.</p>
+  </div>
+</section>
+
+<section class="about">
+  <div class="panel">
+    <div>
+      <h2>A black box with a visible window</h2>
+      <p>No source access, no internal APIs, no database. A human writes the brief, a human approves
+        the data, and a human decides what they saw.</p>
+      <ul style="margin-top:32px">
+        <li><b>Never headless.</b> <code>headless=False</code> in every recording. A loop that hides
+          the window defeats the only purpose of the project.</li>
+        <li><b>Playwright replays; the human watches.</b> Nothing prompts, nothing waits for a
+          keystroke, nothing is synthesised at run time.</li>
+        <li><b>The human owns the verdict.</b> The runner reports that a script threw. It never
+          declares a product pass or fail.</li>
+        <li><b>Login is infrastructure.</b> One saved <code>auth.json</code> per system, loaded by
+          every recording. No recording carries a login of its own.</li>
+      </ul>
+    </div>
+
+    <div class="term" data-ui role="img" aria-label="Terminal output of the main loop, showing a case failing with a Playwright TargetClosedError">
+      <div class="bar"><i></i><i></i><i></i><b>gate-nine — uv run main</b></div>
+      <pre class="out">run 002 — 0 need a url
+1 case(s) recorded — running them now
+
+  <span class="no">FAIL</span>  sales-invoice (12.8s)
+       playwright._impl._errors.TargetClosedError:
+       Locator.click: Target page, context or
+       browser has been closed
+       Call log:
+         - waiting for get_by_role("group")
+             .filter(has_text="Customer*Invoice
+             date*Due")
+             .get_by_label("Open options")
+
+  <span class="no">0/1 passed</span> — failed: sales-invoice</pre>
+    </div>
+  </div>
+</section>
+
+<section class="loop" id="loop">
+  <div class="wrap">
+    <h2 class="reveal">Almost all of it is waiting for a person</h2>
+    <p class="support reveal" style="margin-top:20px">The bar below is the real shape of a run.
+      Two steps are instant, one takes a second, and the rest is the human deciding.</p>
+
+    <div class="bar reveal" role="img" aria-label="Five stages of the main loop shown to scale: find the run, read the case list, tidy, wait for a human, replay each case">
+      <div class="seg b1"><span class="dur">Instant</span><span class="what">Finds the run folder.</div>
+      <div class="seg b2"><span class="dur">Instant</span><span class="what">Reads the case list.</div>
+      <div class="seg b3"><span class="dur">A second</span><span class="what">Moves, links, rewrites.</div>
+      <div class="seg b4"><span class="dur">As long as it takes</span><span class="what">Prints a command, then stops.</div>
+      <div class="seg b5"><span class="dur">A minute each</span><span class="what">One browser per case.</div>
+    </div>
+
+    <div class="exits reveal">
+      <div><b><code>0</code></b><span>Every case played and completed</div>
+      <div><b><code>1</code></b><span>Handed off, or a case failed</div>
+      <div><b><code>2</code></b><span>Cannot run: no run folder, or no case list</div>
+    </div>
+
+    <div class="term reveal" data-ui style="margin-top:56px" role="img" aria-label="Terminal output of the handoff: the cases still needing a URL, each with the runnable command to supply it">
+      <div class="bar"><i></i><i></i><i></i><b>gate-nine — uv run main</b></div>
+      <pre class="out">run 002 — <span class="warn">2 need a url</span>
+
+These cases need a URL before anything can be recorded:
+  task-effort-hours
+  task-subtasks
+
+  echo '&lt;url&gt;' &gt; recordings/task-effort-hours/url.txt
+  echo '&lt;url&gt;' &gt; recordings/task-subtasks/url.txt</pre>
+    </div>
+  </div>
+</section>
+
+<section class="never" id="never">
+  <div class="wrap">
+    <h2 class="reveal" style="max-width:16ch">And the eight it refuses</h2>
+    <div style="margin-top:clamp(48px,7vh,90px)">
+      <p class="word reveal"><a href="#recording">Never headless</a></p>
+      <p class="word reveal"><a href="#recording">Never a guessed URL</a></p>
+      <p class="word reveal"><a href="#recording">Never a written selector</a></p>
+      <p class="word reveal"><a href="#loop">Never a placeholder command</a></p>
+      <p class="word reveal"><a href="#loop">Never an AI verdict</a></p>
+      <p class="word reveal"><a href="#modules">Never a committed secret</a></p>
+      <p class="word reveal"><a href="#open">Never an invented test</a></p>
+      <p class="word reveal"><a href="#loop">Never a window left open</a></p>
+    </div>
+
+    <ul class="why-list reveal">
+        <li><b>Never headless.</b> Seeing data entered is the entire purpose. A loop that hides the window defeats the only reason this project exists.</li>
+        <li><b>Never a guessed URL.</b> It is read from <code>url.txt</code>, or not at all. No route is extrapolated from a sibling case.</li>
+        <li><b>Never a written selector.</b> Every locator in a recording came from a human clicking the live DOM. A guessed one is a false failure waiting to happen.</li>
+        <li><b>Never a placeholder command.</b> Real paths and real values, ready to paste. <code>&lt;run&gt;</code> and <code>&lt;case&gt;</code> are useless.</li>
+        <li><b>Never an AI verdict.</b> The runner reports that a script threw. Whether the product is right is judged by the person watching.</li>
+        <li><b>Never a committed secret.</b> Credentials, saved cookies and evidence stay out of the repository.</li>
+        <li><b>Never an invented test.</b> If it is not in the brief and the case list, it does not exist.</li>
+        <li><b>Never a window left open.</b> A handoff closes every browser first, so the human's next command starts clean.</li>
     </ul>
-</fieldset>
+  </div>
+</section>
 
-<h2>2. People</h2>
-<table>
-    <tr><th>Name</th><th>Role</th></tr>
-    <tr><td>Murugan (Murugesan)</td><td>Chief architect, rachis.co.in — authors the brief</td></tr>
-    <tr><td>Jashveer</td><td>Lead developer</td></tr>
-    <tr><td>Karthick</td><td>Tester — runs the tests, decides PASS/FAIL</td></tr>
-</table>
+<section class="record" id="recording">
+  <div class="wrap inner">
+    <div>
+      <h2 class="reveal">What the harness produces</h2>
+      <p class="reveal" style="margin-top:24px">A run that finds nothing missing prints a runnable
+        command and exits. It never prints a guess at a URL or a route it inferred.</p>
+      <div class="spec reveal">
+        <div><b>A case with no URL</b><span>Ask for the URL first, because nothing can be recorded without knowing where to go.</div>
+        <div><b>A case with no recording</b><span>Hand over the exact <code>playwright codegen</code> line, with the real output path and the real URL already read from disk.</div>
+        <div><b>A case ready to play</b><span>Nothing is asked. The browser opens and the recording runs.</div>
+      </div>
+    </div>
 
-<h2>3. Folder layout</h2>
-<p><strong>The brief is the only input document.</strong> Murugesan writes a Markdown brief
-describing the testing workflow — which vouchers, in what order, and what each one must
-prove. A human creates the next sequential run folder and drops the brief in. The brief's
-filename is free — <code>notes.MD</code>, <code>header-fields.md</code>, whatever the author
-chose. Only the <code>.md</code> extension matters, because that is what the loop looks for.</p>
-<p>The runner never invents a run_id; it only ever reads the highest-numbered folder that
-already exists, and never executes without a human-authored brief.</p>
-<p><strong>There is no plan file.</strong> <code>test.html</code> is gone. It existed only to
-tell an AI which verbs to synthesise, and with recorded code there is nothing left to
-synthesise. The recording <em>is</em> the test.</p>
-<pre>test-cases/
-└── 001/                    # run_id — created by a human
-    ├── &lt;any-name&gt;.md       # brief from Murugesan — the only input document
-    ├── sales-invoice.py    # recorded flow, produced by codegen
-    ├── purchase-bill.py    # recorded flow, produced by codegen
-    ├── auth.json           # saved auth state, reused by every replay
-    └── voucher.png         # current evidence screenshot</pre>
-<p><strong>Recordings live inside the run folder.</strong> They are not canonical and not
-shared between runs. Run <code>002</code> carries its own copies; when the product changes, a
-run re-records against the current DOM rather than inheriting selectors that may no longer
-resolve. History is carried by the run's evidence, not by a shared document.</p>
-<p><strong>The brief says what to test. The recording is how.</strong> The brief carries the
-workflow; each <code>&lt;case&gt;.py</code> carries the exact interactions for that case.
-Neither restates the other.</p>
+    <div class="term reveal" data-ui style="margin-top:56px" role="img" aria-label="Workspace layout: a run folder holding the brief, the case list, the session, and a symlink per case pointing at the one shared recordings folder">
+      <div class="bar"><i></i><i></i><i></i><b>gate-nine</b></div>
+      <pre class="out"><span class="dim">test-cases/</span>
+  002/
+    Work Platform — Test Manual.md <span class="dim">brief</span>
+    cases.yml                    <span class="dim">the list</span>
+    session.md                   <span class="dim">work list</span>
+    sales-invoice <span class="warn">-&gt; ../../recordings/…</span>
+  auth.json       <span class="warn">-&gt; ../recordings/auth.json</span>
 
-<h2>4. Intended workflow</h2>
-<p>The developer provides a testing workflow. The loop records a new test, or replays a
-recorded one, and repeats until every test passes.</p>
+<span class="dim">recordings/</span>
+  auth.json                  <span class="dim">one login</span>
+  sales-invoice/
+    url.txt                  <span class="dim">never guessed</span>
+    sales-invoice.py         <span class="dim">the test</span>
+    screenshot.png           <span class="dim">evidence</span></pre>
+    </div>
 
-<pre>developer provides a testing workflow
-        │
-        ▼
-   ┌─ new test? ──yes──▶ human drives manually, codegen recording ON
-   │                          │
-   │                     bug found? ──yes──▶ HALT
-   │                          │no
-   │                    recording saved to run folder
-   │
-   └─no──▶ play the recorded code again
-              │
-         bug found? ──yes──▶ inform developer ──▶ developer fixes ──┐
-              │no                                                 │
-              └──────────── all tests pass ◀───────────────────────┘
-                            (loop breaks)</pre>
+    <div class="term reveal" data-ui role="img" aria-label="The recorded Playwright source for the sales-invoice case: a visible browser launch, the shared auth state, a page.goto, and a single recorded click, with no form fill and no submit">
+      <div class="bar"><i></i><i></i><i></i><b>recordings/sales-invoice/sales-invoice.py</b></div>
+      <pre class="out"><span class="dim">from playwright.sync_api import</span> sync_playwright
 
-<table>
-    <thead>
-        <tr>
-            <th>Step</th>
-            <th>Stage</th>
-            <th>Owner</th>
-            <th>Mechanism</th>
-            <th>Primary Artifacts</th>
-        </tr>
-    </thead>
-    <tbody>
-        <tr>
-            <td><strong>Step A</strong></td>
-            <td>Human provides the workflow</td>
-            <td>Murugan</td>
-            <td>Manual brief writing &amp; run directory creation</td>
-            <td><code>test-cases/&lt;run_id&gt;/&lt;brief&gt;.md</code></td>
-        </tr>
-        <tr>
-            <td><strong>Step B</strong></td>
-            <td>Record a new test</td>
-            <td>Human + Playwright <code>codegen</code></td>
-            <td>Live manual driving with recording on; halts when a bug is found</td>
-            <td><code>test-cases/&lt;run_id&gt;/&lt;case&gt;.py</code></td>
-        </tr>
-        <tr>
-            <td><strong>Step C</strong></td>
-            <td>Replay a recorded test</td>
-            <td>Playwright runner</td>
-            <td>Visible Chromium (<code>HEADLESS = False</code>) executing the recording</td>
-            <td>Events streamed to <code>events_url</code> over HTTP Basic Auth (no local log)</td>
-        </tr>
-        <tr>
-            <td><strong>Step D</strong></td>
-            <td>Inform the developer</td>
-            <td>Runner + terminal summary</td>
-            <td>Failed recording reported by case and message</td>
-            <td>Remote event stream + terminal summary</td>
-        </tr>
-    </tbody>
-</table>
+<span class="dim">def</span> run(playwright):
+    browser = playwright.chromium.launch(
+        <span class="warn">headless=False</span>)
+    context = browser.new_context(
+        storage_state=<span class="warn">"../auth.json"</span>)
+    page = context.new_page()
+    page.goto(<span class="ok">"https://rachis.co.in/accounting/
+        sales-invoices/new/"</span>)
+    page.get_by_role(<span class="ok">"group"</span>).filter(
+        has_text=<span class="ok">"Customer*Invoice date*Due"</span>
+    ).get_by_label(<span class="ok">"Open options"</span>).click()
+    <span class="dim"># …two more exploratory clicks…</span>
+    page.close()</pre>
+    </div>
+  </div>
+</section>
 
-<fieldset>
-    <legend><strong>Step A — Human Provides the Workflow</strong></legend>
-    <p>Murugesan writes the brief in Markdown — which vouchers, in what order, and what each
-must prove — and a human creates the next sequential run folder under <code>test-cases/</code>
-(e.g. <code>001</code>, <code>002</code>). This brief is the first and only input document the
-loop receives.</p>
-<p class="note">The system never invents a run folder, and never executes without a
-human-authored brief. No <code>.md</code> file means the loop does not proceed — it does not
-guess and does not fall back to any other source.</p>
-</fieldset>
+<section class="modules" id="modules">
+  <div class="wrap">
+    <h2 class="reveal">Where the work happens</h2>
+    <div class="tiles">
+      <div class="tile lead reveal">
+        <span class="t"><code>app/main.py</code></span>
+        <span class="d">The whole loop in one file. Finds the run, requires the case list, calls tidy, and either hands over a command or plays every case back one at a time. This is the <code>uv run main</code> you type.</span>
+      </div>
+      <div class="tile reveal">
+        <span class="t"><code>tidy/workspace.py</code></span>
+        <span class="d">The interface the loop consumes. Holds the paths, so nothing else has to know the layout.</span>
+      </div>
+      <div class="tile reveal">
+        <span class="t"><code>tidy/cases.py</code></span>
+        <span class="d">Reads and writes the case list, and the three-way split: recorded, missing a recording, missing a URL.</span>
+      </div>
+      <div class="tile reveal">
+        <span class="t"><code>tidy/files.py</code></span>
+        <span class="d">Moves loose recordings into folders, fixes drifted filenames, rewrites the auth path. Never overwrites.</span>
+      </div>
+      <div class="tile reveal">
+        <span class="t"><code>tidy/links.py</code></span>
+        <span class="d">Symlinks each case into the run, and points the shared auth file at the real one.</span>
+      </div>
+      <div class="tile reveal">
+        <span class="t"><code>tidy/session.py</code></span>
+        <span class="d">Writes the work list a cold agent resumes from. Cases and state, never a verdict.</span>
+      </div>
+      <div class="tile reveal">
+        <span class="t"><code>config.py</code> · <code>events.py</code></span>
+        <span class="d">Environment settings, and the remote event POST over Basic Auth. No local log is kept.</span>
+      </div>
+      <div class="tile reveal">
+        <span class="t"><code>planner.py</code></span>
+        <span class="d">Finds the highest-numbered run folder, and the brief inside it. The filename is free.</span>
+      </div>
+      <div class="tile reveal">
+        <span class="t"><code>driver.py</code></span>
+        <span class="d">Drove a plan file that no longer exists. Reads nothing that is still there.</span>
+      </div>
+      <div class="tile reveal">
+        <span class="t"><code>diagnose.py</code></span>
+        <span class="d">Inspected that same deleted plan. Superseded.</span>
+      </div>
+      <div class="tile reveal">
+        <span class="t"><code>app_tests/</code></span>
+        <span class="d">One hundred thirty-five tests over a real temporary tree and real symlinks. No browser is opened.</span>
+      </div>
+    </div>
+  </div>
+</section>
 
-<fieldset>
-    <legend><strong>Step B — Record a New Test via Playwright <code>codegen</code></strong></legend>
-    <p>A test that does not yet exist is driven manually by a human, with <code>codegen</code>
-recording. The recording captures real, resilient selectors (<code>get_by_placeholder</code>,
-<code>get_by_role</code>) directly from the live DOM, so nothing is guessed or hallucinated.</p>
-<p><strong>The run halts the moment a bug is found.</strong> During this step the human is the
-detector — they are watching the screen, and they stop. That is the whole bug-detection
-mechanism at record time.</p>
+<section class="open" id="open">
+  <div class="wrap">
+    <h2 class="reveal" style="max-width:18ch">What is still open</h2>
+    <p class="support reveal" style="margin-top:20px">Open a card to read it. One is open at a time.</p>
 
-    <details open>
-        <summary><b>Why <code>codegen</code> Replaces AI-Written Selectors</b></summary>
-        <table>
-            <thead>
-                <tr>
-                    <th>Dimension</th>
-                    <th>AI-written selectors</th>
-                    <th><code>codegen</code> recording</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><strong>Selector Accuracy</strong></td>
-                    <td>AI guesses CSS/XPath from prose; prone to broken or hallucinated locators.</td>
-                    <td>Records locators directly from live user actions.</td>
-                </tr>
-                <tr>
-                    <td><strong>Speed &amp; Effort</strong></td>
-                    <td>Iterative trial-and-error across multiple turns.</td>
-                    <td>The human clicks through the form once.</td>
-                </tr>
-                <tr>
-                    <td><strong>Role of AI</strong></td>
-                    <td>Writes raw browser automation without DOM access.</td>
-                    <td>None during recording. The human drives; the machine records.</td>
-                </tr>
-            </tbody>
-        </table>
-    </details>
+    <div class="drawer" id="drawer">
+      <div class="card k1">
+        <span class="tab">The case list</span>
+        <button class="q" aria-expanded="true">Run 002 names the wrong case<span class="mark">Close</span></button>
+        <div class="a">Its <code>cases.yml</code> lists <code>sales-invoice</code>, which belongs to run 001's
+          Accounting brief. Run 002 is the Work Platform brief, so the loop opened a browser on the wrong
+          form. The name comes from reading the brief and cannot be inferred. No command produces it.
+          Until it is corrected, run 002 tests run 001's case.</div>
+      </div>
+      <div class="card k2 shut">
+        <span class="tab">A URL</span>
+        <button class="q" aria-expanded="false">The Work Platform tenant URL is unknown<span class="mark">Read</span></button>
+        <div class="a">The brief names Fortune Electronics or another Work-enabled tenant, and explicitly
+          not Zigma. Nothing here extrapolates a route from a sibling case or falls back to the base URL.
+          Until a human writes it into the case folder, that case cannot be recorded.</div>
+      </div>
+      <div class="card k3 shut">
+        <span class="tab">The recording</span>
+        <button class="q" aria-expanded="false">The one recording is an exploration, not a test<span class="mark">Read</span></button>
+        <div class="a">It contains three clicks, no form fill and no submit, so it can never pass: there
+          is nothing in it to replay as a test. It needs re-recording with the form filled and submitted.
+          The harness already reports this correctly: the browser opens, and the first recorded selector
+          fails because the DOM has moved since.</div>
+      </div>
+      <div class="card k4 shut">
+        <span class="tab">Dead modules</span>
+        <button class="q" aria-expanded="false">Two modules still point at a deleted plan<span class="mark">Read</span></button>
+        <div class="a"><code>driver.py</code> and <code>diagnose.py</code> read a plan file that was
+          deleted when recordings replaced it. Nothing imports them, but they are still importable and
+          would fail if run. They should be deleted rather than left to mislead.</div>
+      </div>
+    </div>
+  </div>
+</section>
 
-    <details>
-        <summary><b>Commands &amp; saved authentication state</b></summary>
-        <p>1. <strong>Save authentication state once, into the run folder:</strong></p>
-        <pre><kbd>uv run playwright codegen --save-storage=auth.json https://rachis.co.in/login/</kbd></pre>
-        <p>2. <strong>Record a voucher flow, already authenticated:</strong></p>
-        <pre><kbd>uv run playwright codegen --load-storage=auth.json -o sales-invoice.py https://rachis.co.in/accounting/sales-invoices/new/</kbd></pre>
-        <p>Login is infrastructure, not a test. It is saved once and loaded on every recording
-and every replay, so no recording carries a login flow of its own.</p>
-    </details>
-</fieldset>
+<footer class="foot">
+  <div class="wrap">
+    <div class="blocks" aria-hidden="true">
+      <span style="height:100%">G</span>
+      <span style="height:72%">a</span>
+      <span style="height:88%">t</span>
+      <span style="height:64%">e</span>
+      <span style="height:96%">N</span>
+      <span style="height:70%">i</span>
+      <span style="height:84%">n</span>
+      <span style="height:60%">e</span>
+    </div>
+    <div class="cols">
+      <div>
+        <h4>The loop</h4>
+        <ul>
+          <li><a href="#loop">How it runs</a></li>
+          <li><a href="#never">The eight refusals</a></li>
+          <li><a href="#recording">The recording contract</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>Reference</h4>
+        <ul>
+          <li><a href="#modules">Modules</a></li>
+          <li><a href="#open">Open items</a></li>
+        </ul>
+      </div>
+      <div>
+        <h4>In the repo</h4>
+        <ul>
+          <li><a href="AGENTS.md">AGENTS.md</a></li>
+          <li><a href="README.md">README.md</a></li>
+          <li><a href="docs/AGENTS.md">Repository guidelines</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="base">
+      <span>Gate Nine, single point of reference. The brief says what to test; the recording says how.</span>
+      <span>Visible browser · human verdict · black box</span>
+    </div>
+  </div>
+</footer>
 
-<fieldset>
-    <legend><strong>Step C — Replay a Recorded Test</strong></legend>
-    <p>A test that already exists is played back by executing its recording in a visible
-Chromium browser (<code>HEADLESS = False</code>, §1):</p>
-    <ul>
-        <li>Load <code>auth.json</code> so the run starts already signed in.</li>
-        <li>Execute <code>&lt;case&gt;.py</code> as written — the same calls, in the same order,
-            against the same selectors.</li>
-        <li>POST every operation as an event to <code>events_url</code> over HTTP Basic Auth
-            (nothing is written to a local log).</li>
-        <li>Hold <code>STEP_DELAY</code> (3 seconds) between operations so a human can follow
-            what was entered.</li>
-    </ul>
-    <p class="note">Configure the remote endpoint in <code>.env</code>: <code>EVENTS_URL</code>
-    and <code>EVENTS_PASSWORD</code>. When <code>EVENTS_URL</code> is empty, events are not
-    recorded.</p>
-</fieldset>
+<script>
+(function () {
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-<fieldset>
-    <legend><strong>Step D — Inform the Developer, and the Loop Repeats</strong></legend>
-    <p>A bug surfaces in one of two ways, and the two are different because the two kinds of
-run are different:</p>
-    <ul>
-        <li><strong>During recording (Step B)</strong> — the human decides. They are watching
-            and they halt. No automation is involved.</li>
-        <li><strong>During replay (Step C)</strong> — the recording threw. That is the bug.</li>
-    </ul>
-    <p>Either way the developer is informed: the event stream carries it, and the terminal
-prints a summary naming the case and what failed.</p>
-    <p class="note">Replay detects a broken flow. It does not judge whether a number is right —
-    that judgement is the human's, made by watching.</p>
-    <p>The developer fixes the product and re-runs. The loop breaks when every test passes.</p>
-</fieldset>
+  /* The one live thing: the open-items drawer. */
+  var cards = Array.prototype.slice.call(document.querySelectorAll(".card"));
+  cards.forEach(function (card) {
+    var q = card.querySelector(".q"), mark = card.querySelector(".mark");
+    q.addEventListener("click", function () {
+      var isOpen = !card.classList.contains("shut");
+      cards.forEach(function (other) {
+        other.classList.add("shut");
+        other.querySelector(".q").setAttribute("aria-expanded", "false");
+        other.querySelector(".mark").textContent = "Read";
+      });
+      if (isOpen) {
+        card.classList.add("shut");
+        q.setAttribute("aria-expanded", "false");
+        mark.textContent = "Read";
+      } else {
+        card.classList.remove("shut");
+        q.setAttribute("aria-expanded", "true");
+        mark.textContent = "Close";
+      }
+    });
+  });
 
-<h2>5. Recording contract</h2>
-<p>Each case is its own folder, holding the real URL, the recording, and the evidence:</p>
-<pre>test-cases/&lt;run&gt;/&lt;case&gt;/
-├── url.txt          # the real URL — never guessed
-├── &lt;case&gt;.py        # the recording
-└── screenshot.png   # evidence — this name never changes</pre>
-<p>A recording is ordinary Playwright code. It is executed, not interpreted — the runner
-imports nothing from it. What a recording contains is what a recorded test does.</p>
-<ul>
-    <li><strong>Navigation:</strong> <code>page.goto()</code> to the URL in <code>url.txt</code>.</li>
-    <li><strong>Input:</strong> <code>get_by_placeholder()</code>, <code>get_by_label()</code>,
-        <code>get_by_role()</code> — whatever the DOM actually offered at record time.</li>
-    <li><strong>Interaction:</strong> <code>click()</code>, <code>press()</code>,
-        <code>select_option()</code> on buttons, tabs, and action controls.</li>
-</ul>
-<p><strong>Invariants.</strong></p>
-<ul>
-    <li><strong>No selector is ever written by the AI.</strong> Every locator in a recording
-        came from a human clicking the real DOM.</li>
-    <li><strong>The URL is never guessed.</strong> It is read from <code>url.txt</code>. A missing
-        <code>url.txt</code> means the URL is unknown and the step cannot proceed.</li>
-    <li><strong>The screenshot line is appended by the AI</strong>, immediately before the form
-        submit, as <code>page.screenshot(path="screenshot.png")</code> — a bare filename so it
-        resolves into the case's own folder. The human never takes it by hand.</li>
-    <li><strong>Login is never in a recording.</strong> It is loaded from
-        <code>auth.json</code>.</li>
-</ul>
+  /* Signature move: the front folder opens on load. */
+  var hero = document.querySelector(".folder.open");
+  if (hero && !reduced) {
+    hero.classList.add("shutter");
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () { hero.classList.add("open"); });
+    });
+  }
 
-<h2>6. Main loop details</h2>
-<p><strong>Playwright replays; the human watches.</strong> A replay is unattended — nothing
-prompts, and nothing waits for a keystroke.</p>
-<ol>
-    <li>Find the latest <code>run_id</code> — the highest-numbered folder under
-        <code>test-cases/</code>.</li>
-    <li><strong>Discover the <code>.md</code> file from Murugesan inside it.</strong>
-        The name is irrelevant; only its presence counts. Without it, the loop does not proceed.</li>
-    <li>Find every <code>&lt;case&gt;/</code> subfolder in the run folder. Each one is a test that
-        already exists.</li>
-    <li>Open Chromium <strong>visible, never headless</strong> (§1).</li>
-    <li>Load <code>auth.json</code> so every recording starts signed in.</li>
-    <li>Run each <code>&lt;case&gt;.py</code> in turn, exactly as written, one at a time — the
-        tenant is shared state, so never in parallel. No interpretation, no substitution of
-        values, no synthesis.</li>
-    <li>Hold <code>STEP_DELAY</code> (3 seconds) between operations so human eyes can follow
-        what was just entered before the next action fires.</li>
-    <li>POST every operation as an event to <code>events_url</code> over HTTP Basic Auth.
-        Nothing is written to a local log.</li>
-    <li><code>screenshot.png</code> is written into that case's own folder, so two cases never
-        overwrite each other's evidence.</li>
-    <li>An uncaught throw stops that recording, is reported by case and message, and ends
-        the run.</li>
-    <li>When every recording completes, the browser closes, the terminal returns, and the loop
-        breaks.</li>
-</ol>
-
-<h2>7. Lifecycle</h2>
-<details open>
-    <summary><b>Test Lifecycle</b></summary>
-    <p><code>briefed &rarr; recorded &rarr; running &rarr; passed | failed</code></p>
-    <ul>
-        <li><mark>briefed</mark>: The workflow names the test. No code exists yet.</li>
-        <li><mark>recorded</mark>: A human drives it manually with <code>codegen</code>
-            recording on, writing <code>&lt;case&gt;.py</code> into the case folder. The AI then
-            appends the screenshot line before the form submit. The test now exists and can be
-            replayed.</li>
-        <li><mark>running</mark>: Executed visibly by Playwright from the recording.</li>
-        <li><mark>passed</mark>: The recording ran to completion and the human saw nothing wrong.</li>
-        <li><mark>failed</mark>: The recording threw, or the human saw wrong behaviour. The
-            developer is informed and fixes the product.</li>
-    </ul>
-</details>
-
-<details open>
-    <summary><b>Run Lifecycle</b></summary>
-    <p><code>brief-present &rarr; recording &rarr; replay &rarr; failed | passed</code></p>
-    <ul>
-        <li><code>brief-present</code>: A human-authored <code>.md</code> exists in the run
-            folder. Without it the loop does not proceed.</li>
-        <li><code>recording</code>: Tests not yet recorded are driven manually, with
-            <code>codegen</code> on, halting when a bug is found.</li>
-        <li><code>replay</code>: Recorded tests are played back unattended in visible Chromium,
-            one at a time.</li>
-        <li><code>failed</code>: A recording stopped on a throw. The developer is informed.</li>
-        <li><code>passed</code>: Every recording in the run completed and the human saw nothing
-            wrong. The loop breaks.</li>
-    </ul>
-    <p>A failed run is not resumed. The developer fixes the product and re-runs; the next
-    attempt is a fresh <code>run_id</code> (<code>002</code>, <code>003</code>, …) with its
-    own recordings made against the current DOM.</p>
-</details>
-
-<h2>8. Logging &amp; remote event streaming</h2>
-<p>Every operation is POSTed as an event to the remote FastAPI endpoint configured in
-<code>events_url</code> over HTTP Basic Auth. No local event log is kept.</p>
-<p>Every operation is logged as <code>operation &lt;name:value&gt; &lt;form name&gt;</code>:</p>
-<pre>input product:hamam voucher
-create screenshot voucher
-save screenshot voucher
-delete screenshot voucher
-click home delivery note</pre>
-<p>Logs carry action, dynamic step number, safe details, and timestamp. Each step logs one
-<code>step_setup</code>, <code>step_ok</code>, <code>step_no_handler</code>, or
-<code>step_failed</code> event; a run ends with a <code>run_result</code> event carrying counts
-and final status (<code>passed</code>, <code>incomplete</code>, or <code>failed</code>).
-During the run, Playwright diagnostics (<code>playwright_console_error</code>,
-<code>playwright_page_error</code>, <code>playwright_request_failed</code>,
-<code>playwright_page_crash</code>) are recorded with active step context. Request query
-strings and fragments are omitted. The team wants a live relay of the current operation
-so Murugan and Jashveer see real-time progress.</p>
-
-<h2>9. Infra</h2>
-<ul>
-    <li>Pure CLI: Browser execution, event logging, and diagnostics operate via local Python CLI commands. Events are streamed to <code>events_url</code> over HTTP Basic Auth; nothing is written to a local log.</li>
-    <li>Remote terminal-only compute for the developers to watch the live event stream via the remote endpoint (or any httpd-protected log viewer).</li>
-    <li><code>app.driver</code> is the sole browser runner, replaying recordings in visible Chromium and POSTing events remotely.</li>
-    <li>Runtime data is gitignored: <code>.env</code> and every run-local screenshot. Evidence may quote tenant data, so it is never
-        committed.</li>
-</ul>
-
-<h2>10. Safety</h2>
-<ul>
-    <li>Never commit <code>.env</code>, tenant credentials, customer data, or unredacted evidence.</li>
-    <li>The runner may open and inspect the tenant but must not create or post a voucher
-        unless a human approved that specific case and its test data.</li>
-    <li>A human owns the final PASS/FAIL — an AI model never marks a run as passed.</li>
-    <li>No AI writes selectors. Recordings are produced by a human driving the live
-        DOM; the runner only executes them. The human writes the brief and decides PASS/FAIL.</li>
-</ul>
-
-<h2>11. Open items</h2>
-<ul>
-    <li><strong>The loop has not been rebuilt to this design.</strong> §3 through §7 now
-        describe the intended loop, but the code still executes the superseded design.
-        <code>app/driver.py</code> reads a verb plan out of <code>test.html</code> and
-        synthesises selectors at runtime, <code>app/vouchers/&lt;case&gt;/test-case.html</code>
-        still holds hand-written method prose, and <code>app/diagnose.py</code> inspects a plan.
-        Replaying recorded <code>*.py</code> files instead is the outstanding work.</li>
-    <li><strong>No recordings exist yet for run <code>002</code>.</strong> Every case named in
-        the brief needs a human to drive it once with <code>codegen</code> recording, then the AI
-        appends the screenshot line before the form submit.</li>
-    <li><strong>URLs are unknown until a human supplies them.</strong> Each case folder needs a
-        <code>url.txt</code>. Nothing infers a route, so a case with no <code>url.txt</code>
-        cannot be recorded or replayed.</li>
-    <li><strong>Replay detects broken flows, not wrong values.</strong> A recording that runs to
-        completion proves the flow still works. Whether the numbers are right is judged by the
-        human watching the screen.</li>
-    <li><strong>Live tenant routes, from run <code>001</code>.</strong> Confirmed against the
-        live tenant on 2026-10-17: Sales Invoice &rarr; <code>/accounting/sales-invoices/new/</code>,
-        Purchase Bill &rarr; <code>/accounting/bills/new/</code>, GRN &rarr;
-        <code>/accounting/grns/new/</code> (the tenant's own heading reads
-        <em>Goods Receipt</em>), Credit Note &rarr; <code>/accounting/credit-notes/new/</code>,
-        Debit Note &rarr; <code>/accounting/debit-notes/new/</code>. Two dead ends are
-        worth knowing: the <em>All modules &rarr; Accounts Receivable</em> button leads
-        to <code>/ar</code>, which 404s, and <code>/accounting/invoices/</code> does
-        not exist either.</li>
-</ul>
-
+  /* Section entrances, staggered. */
+  var groups = Array.prototype.slice.call(document.querySelectorAll(".reveal"));
+  if (reduced || !("IntersectionObserver" in window)) {
+    groups.forEach(function (el) { el.classList.add("in"); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        var el = entry.target;
+        var sibs = Array.prototype.filter.call(el.parentNode.children, function (c) {
+          return c.classList && c.classList.contains("reveal");
+        });
+        var i = sibs.indexOf(el);
+        el.style.transitionDelay = (i < 0 ? 0 : Math.min(i, 5) * 70) + "ms";
+        el.classList.add("in");
+        io.unobserve(el);
+      });
+    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.05 });
+    groups.forEach(function (el) { io.observe(el); });
+  }
+})();
+</script>
 </body>
 </html>

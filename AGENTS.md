@@ -270,22 +270,23 @@ and carry on.
 Run autonomously until every rule is satisfied. The only thing that stops you is work no code
 can do — recording a case, supplying a URL. Then stop, and hand over the command.
 
-`needs` is the signal; `commands` is how to clear it. **Never report a discrepancy without the
-command that resolves it.**
+`missing_py` and `ask_url_for` are the signals; `commands` is how to clear them. **Never report a
+discrepancy without the command that resolves it.**
 
 ```json
-{ "case": "effort-hours", "state": "pending",
-  "needs": ["recording", "url"],
-  "commands": [
-    "echo '<work-url>' > recordings/effort-hours/url.txt",
-    "uv run playwright codegen --load-storage=./recordings/auth.json -o recordings/effort-hours/effort-hours.py",
-    "uv run python -m app.tidy effort-hours 002"
-  ] }
+{ "action": "prepared", "linked": "created",
+  "missing_py": [],
+  "ask_url_for": ["effort-hours"],
+  "commands": ["echo '<work-url>' > recordings/effort-hours/url.txt"] }
 ```
 
-`needs: []` means the case is done — next case, no comment. Anything in `needs` means stop,
-hand over `commands`, and wait. Do not work around it, do not continue to later cases, do not
-report the run as progressing past it.
+Two lists, and only two things worth reporting. A case that has a recording is linked silently. A
+case without one is `missing_py`. A linked case with no `url.txt` is `ask_url_for` — and the URL
+comes first, because nothing can be recorded without knowing where to go.
+
+`missing_py: []` and `ask_url_for: []` means the case is done: next case, no comment. Anything in
+either means stop, hand over `commands`, and wait. Do not work around it, do not continue to later
+cases, do not report the run as progressing past it.
 
 A case with two recordings is ambiguous — `tidy` reports it and touches nothing, and that is a
 discrepancy you hand over. A real directory where a link belongs is reported `skipped` and left
