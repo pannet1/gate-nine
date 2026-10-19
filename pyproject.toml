@@ -10,7 +10,7 @@ dependencies = [
 ]
 
 [project.scripts]
-gn = "app.main:main"
+main = "app.main:main"
 
 [build-system]
 requires = ["hatchling"]
