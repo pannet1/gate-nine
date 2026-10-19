@@ -93,17 +93,25 @@ If a command is long, still give one line in the reply. One line beats a paragra
 ### 2.6 The session record
 
 A reply scrolls away. The next AI agent picking up this repo has no memory of it. So every
-handoff is also written down:
+handoff is also written down.
 
 **Where:** `test-cases/<run>/<case>/session.md`. Create the case folder if it does not exist
-yet. Append, never overwrite — the value is the history.
+yet.
 
-**What goes in it:** everything you said and everything you did, in order. What you found, what
-you decided and why, what you changed, what you refused to do, what you handed off, and what is
-still blocked. Enough that a cold agent can pick up without re-deriving anything.
+**Update, never append.** If one is already there, read it, then rewrite it to the current
+state. **History is not wanted.** A cold agent needs to know where things stand, not read a
+diary of how they got there.
 
-**Not this:** the file is a record of what happened. It is not a plan, a report on the product,
-or a summary of the brief.
+**What goes in it:** the current state, in full enough that a cold agent can pick up without
+re-deriving anything.
+
+- What is done
+- What is in progress
+- What is blocked, and what exactly is needed to unblock it
+- Decisions already made, and why — so they are not reopened by accident
+- The exact next action, runnable
+
+**Not this:** not a diary, not a plan, not a report on the product, not a summary of the brief.
 
 ---
 
