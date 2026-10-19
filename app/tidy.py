@@ -32,13 +32,15 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .planner import find_brief
+
 RECORDING_SUFFIX = ".py"
 SESSION_FILENAME = "session.md"
 DEFAULT_RUNS_ROOT = Path("test-cases")
 DEFAULT_RECORDINGS_DIR = Path("recordings")
 
 
-def tidy_recordings(recordings_dir: Path) -> list[dict[str, Any]]:
+def tidy_recordings(recordings_dir: Path, cases: list[str] | None = None) -> list[dict[str, Any]]:
     """Give every loose ``<case>.py`` in recordings_dir its own case folder.
 
     Returns one record per file moved. A file already inside a case folder is
@@ -52,6 +54,8 @@ def tidy_recordings(recordings_dir: Path) -> list[dict[str, Any]]:
         if not entry.is_file() or entry.suffix != RECORDING_SUFFIX:
             continue
         case = entry.stem
+        if cases is not None and case not in cases:
+            continue
         case_dir = recordings_dir / case
         case_dir.mkdir(exist_ok=True)
         destination = case_dir / entry.name
@@ -60,7 +64,7 @@ def tidy_recordings(recordings_dir: Path) -> list[dict[str, Any]]:
     return moved
 
 
-def normalise_recordings(recordings_dir: Path) -> list[dict[str, Any]]:
+def normalise_recordings(recordings_dir: Path, cases: list[str] | None = None) -> list[dict[str, Any]]:
     """Make each case folder's recording match its folder name.
 
     A lazy or typo-prone human leaves ``<case>/<different>.py``. The link still
@@ -75,6 +79,8 @@ def normalise_recordings(recordings_dir: Path) -> list[dict[str, Any]]:
         return fixed
 
     for case_dir in sorted(e for e in recordings_dir.iterdir() if e.is_dir()):
+        if cases is not None and case_dir.name not in cases:
+            continue
         expected = case_dir / f"{case_dir.name}{RECORDING_SUFFIX}"
         if expected.exists():
             continue
@@ -253,6 +259,74 @@ def write_session(run_dir: Path, brief: Path | None, cases: list[str], recording
     return session
 
 
+def cases_in_run(run_dir: Path, recordings_dir: Path) -> list[str]:
+    """Case names for a run's session file: whatever is linked plus what exists."""
+    linked = [entry.name for entry in sorted(run_dir.iterdir()) if entry.is_symlink()]
+    available = case_folders(recordings_dir)
+    return sorted(dict.fromkeys(linked + available))
+
+
+def tidy_one_case(
+    case: str,
+    run_id: str,
+    runs_root: Path = DEFAULT_RUNS_ROOT,
+    recordings_dir: Path = DEFAULT_RECORDINGS_DIR,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Bring one case into one run, doing whatever that case still needs.
+
+        uv run python -m app.tidy sales-invoice 001
+
+    In order: give a loose recording its folder, fix a name that drifted,
+    point the recording at the single auth file, symlink the case into the
+    run, and rewrite session.md for the run.
+    """
+    run_dir = runs_root / run_id
+    if not run_dir.is_dir():
+        return {"action": "no-such-run", "run_id": run_id, "case": case}
+
+    briefs = find_brief(run_dir)
+    brief = briefs[0] if briefs else None
+    names = [case]
+
+    if dry_run:
+        loose = recordings_dir / f"{case}.py"
+        would_tidy = loose.is_file()
+        return {
+            "action": "would-prepare",
+            "dry_run": True,
+            "case": case,
+            "run_id": run_id,
+            "would_move": str(loose) if would_tidy else None,
+            "would_move_to": str(recordings_dir / case / f"{case}.py") if would_tidy else None,
+            "session": str(run_dir / SESSION_FILENAME),
+        }
+
+    tidied = tidy_recordings(recordings_dir, names)
+    renamed = normalise_recordings(recordings_dir, names)
+    auth_fixed = point_recording_at_auth(recordings_dir, case)
+    linked = link_case(run_dir, recordings_dir, case)
+    system_auth = link_system_auth(runs_root, recordings_dir)
+
+    all_cases = cases_in_run(run_dir, recordings_dir)
+    write_session(run_dir, brief, all_cases, recordings_dir)
+
+    return {
+        "action": "prepared",
+        "dry_run": False,
+        "case": case,
+        "run_id": run_id,
+        "brief": brief.name if brief else None,
+        "tidied": tidied,
+        "renamed": renamed,
+        "auth_fixed": auth_fixed,
+        "linked": linked,
+        "system_auth": system_auth,
+        "state": case_state(run_dir, case),
+        "session": str(run_dir / SESSION_FILENAME),
+    }
+
+
 def prepare(
     runs_root: Path = DEFAULT_RUNS_ROOT,
     recordings_dir: Path = DEFAULT_RECORDINGS_DIR,
@@ -315,27 +389,48 @@ def prepare(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Tidy loose recordings, link them into the run, report state."
+        description="Tidy recordings, link them into a run, report state.",
+        epilog=(
+            "tidy.py <case> <run_id>   prepare one case into one run\n"
+            "tidy.py                    prepare every case into the latest run"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("case", nargs="?", help="case name, e.g. sales-invoice")
+    parser.add_argument("run_id", nargs="?", help="target run id, e.g. 001")
     parser.add_argument("--runs-root", default=str(DEFAULT_RUNS_ROOT))
     parser.add_argument(
         "--recordings", dest="recordings_dir", default=str(DEFAULT_RECORDINGS_DIR)
     )
-    parser.add_argument("--run-id", help="target a specific run instead of the latest")
+    parser.add_argument("--run-id", dest="run_id_opt", help="target a run (batch mode)")
     parser.add_argument("--cases", help="comma-separated case names, overrides discovery")
     parser.add_argument(
         "--dry-run", action="store_true", help="report what would change, change nothing"
     )
     args = parser.parse_args()
 
-    names = [name.strip() for name in args.cases.split(",") if name.strip()] if args.cases else None
-    report = prepare(
-        runs_root=Path(args.runs_root),
-        recordings_dir=Path(args.recordings_dir),
-        run_id=args.run_id,
-        cases=names,
-        dry_run=args.dry_run,
-    )
+    runs_root = Path(args.runs_root)
+    recordings_dir = Path(args.recordings_dir)
+
+    if args.case:
+        report = tidy_one_case(
+            case=args.case,
+            run_id=args.run_id or args.run_id_opt,
+            runs_root=runs_root,
+            recordings_dir=recordings_dir,
+            dry_run=args.dry_run,
+        )
+    else:
+        names = (
+            [n.strip() for n in args.cases.split(",") if n.strip()] if args.cases else None
+        )
+        report = prepare(
+            runs_root=runs_root,
+            recordings_dir=recordings_dir,
+            run_id=args.run_id_opt or args.run_id,
+            cases=names,
+            dry_run=args.dry_run,
+        )
     print(json.dumps(report, indent=2, ensure_ascii=False))
 
 

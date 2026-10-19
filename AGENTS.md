@@ -225,9 +225,18 @@ recordings/sales-invoice.py     ← a file, not a folder
 mechanical part — do not hand-organise files by hand:
 
 ```bash
-cd /home/pannet1/gate-nine && uv run python -m app.tidy --dry-run   # report only
-cd /home/pannet1/gate-nine && uv run python -m app.tidy             # tidy, link, report
+# one case into one run — the command you hand the human
+cd /home/pannet1/gate-nine && uv run python -m app.tidy sales-invoice 001
+
+# every case into the latest run
+cd /home/pannet1/gate-nine && uv run python -m app.tidy
+
+# report without touching disk
+cd /home/pannet1/gate-nine && uv run python -m app.tidy sales-invoice 001 --dry-run
 ```
+
+`<case> <run_id>` does everything that one case still needs and touches nothing else — a
+sibling case sitting flat is left for its own invocation.
 
 It gives every loose `recordings/<case>.py` its folder, renames a recording whose name drifted
 from its folder (`effort-hours/effort-hour.py` → `effort-hours/effort-hours.py`), symlinks each

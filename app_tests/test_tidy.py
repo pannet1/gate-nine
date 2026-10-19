@@ -15,6 +15,7 @@ from app.tidy import (
     case_folders,
     normalise_recordings,
     point_recording_at_auth,
+    tidy_one_case,
     case_state,
     link_case,
     link_system_auth,
@@ -518,6 +519,64 @@ class PrepareTests(TempTree):
         (self.recordings / "beta.py").write_text("# flat\n", encoding="utf-8")
 
         self.assertEqual(case_folders(self.recordings), ["alpha"])
+
+
+class TidyOneCaseTests(TempTree):
+    """tidy.py <case> <run_id> — the lazy human's single command."""
+
+    def test_lazy_flat_recording_is_brought_into_one_run(self) -> None:
+        self.make_run()
+        (self.recordings / "auth.json").write_text("{}", encoding="utf-8")
+        (self.recordings / "effort-hours.py").write_text("# recorded\n", encoding="utf-8")
+
+        report = tidy_one_case("effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings)
+
+        self.assertEqual(report["action"], "prepared")
+        self.assertEqual(report["state"], "complete")
+        self.assertEqual([t["case"] for t in report["tidied"]], ["effort-hours"])
+        self.assertTrue((self.recordings / "effort-hours" / "effort-hours.py").is_file())
+        self.assertTrue((self.runs / "002" / "effort-hours").is_symlink())
+        self.assertTrue((self.runs / "002" / "session.md").is_file())
+
+    def test_it_touches_only_the_named_case(self) -> None:
+        """A sibling case sitting flat must be left for its own invocation."""
+        self.make_run()
+        (self.recordings / "effort-hours.py").write_text("# a\n", encoding="utf-8")
+        (self.recordings / "subtasks.py").write_text("# b\n", encoding="utf-8")
+
+        tidy_one_case("effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings)
+
+        self.assertTrue((self.recordings / "effort-hours").is_dir())
+        self.assertTrue((self.recordings / "subtasks.py").is_file(), "sibling must stay untouched")
+        self.assertFalse((self.runs / "002" / "subtasks").exists())
+
+    def test_unknown_run_is_reported(self) -> None:
+        report = tidy_one_case("effort-hours", "099", runs_root=self.runs, recordings_dir=self.recordings)
+
+        self.assertEqual(report["action"], "no-such-run")
+
+    def test_dry_run_changes_nothing(self) -> None:
+        self.make_run()
+        (self.recordings / "effort-hours.py").write_text("# a\n", encoding="utf-8")
+
+        report = tidy_one_case(
+            "effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings, dry_run=True
+        )
+
+        self.assertEqual(report["action"], "would-prepare")
+        self.assertTrue((self.recordings / "effort-hours.py").is_file())
+        self.assertFalse((self.recordings / "effort-hours").exists())
+        self.assertFalse((self.runs / "002" / "effort-hours").exists())
+        self.assertFalse((self.runs / "002" / "session.md").exists())
+
+    def test_session_lists_the_case_after_the_run(self) -> None:
+        self.make_run()
+        (self.recordings / "effort-hours.py").write_text("# a\n", encoding="utf-8")
+
+        tidy_one_case("effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings)
+
+        text = (self.runs / "002" / "session.md").read_text(encoding="utf-8")
+        self.assertIn("`effort-hours`", text)
 
 
 if __name__ == "__main__":
