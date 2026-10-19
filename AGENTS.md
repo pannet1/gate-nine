@@ -144,16 +144,20 @@ is the one to work on.
 
 The recording **is** the test. `playwright codegen` records real selectors from the live DOM.
 
-### 4.1 Auth — infrastructure, recorded once
-Login is never part of a test. It is saved into the case folder so the recording finds it by
-bare name when run from there:
+### 4.1 Auth — one per system, recorded once
+Login is never part of a test. There is **one `auth.json` per system**, at
+`test-cases/auth.json` — not one per case:
 
 ```bash
-uv run playwright codegen --save-storage=recordings/<case>/auth.json https://<tenant>/login/
+uv run playwright codegen --save-storage=test-cases/auth.json https://<tenant>/login/
 ```
 
-The human logs in by hand, then closes. `auth.json` is gitignored. It is machine-local and
-never travels with the repo — each machine generates its own.
+The human logs in by hand, then closes. A recording resolves `storage_state="auth.json"`
+from its own folder, so `app.tidy` links each `recordings/<case>/auth.json` to that one file.
+Those links are never committed — the target is gitignored, so a committed link would dangle
+on a fresh clone.
+
+`auth.json` is machine-local and never travels with the repo — each machine generates its own.
 
 ### 4.2 Record a test — human drives, machine records
 The human drives the browser. You cannot. This is a handoff.
@@ -163,8 +167,8 @@ The human drives the browser. You cannot. This is a handoff.
 ```
 recordings/<case>/
 ├── url.txt          # the real URL — never guessed, never assumed
-├── auth.json        # saved auth state for this case
 ├── <case>.py        # the recording
+├── auth.json        # -> ../../test-cases/auth.json — one per system, gitignored
 └── screenshot.png   # evidence — this name never changes
 ```
 
@@ -198,7 +202,7 @@ what answers "is this case done", link or file.
 **Recording command** — the human records into the case folder, and the URL comes from `url.txt`:
 
 ```bash
-uv run playwright codegen --load-storage=recordings/<case>/auth.json -o recordings/<case>/<case>.py "$(cat recordings/<case>/url.txt)"
+uv run playwright codegen --load-storage=test-cases/auth.json -o recordings/<case>/<case>.py "$(cat recordings/<case>/url.txt)"
 ```
 
 The human clicks through the flow. Every action is captured. Then you append the screenshot

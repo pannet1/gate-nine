@@ -129,9 +129,49 @@ def link_case(run_dir: Path, recordings_dir: Path, case: str) -> str:
     return "created"
 
 
-def link_cases(run_dir: Path, recordings_dir: Path, cases: list[str]) -> dict[str, str]:
+def link_cases(
+    run_dir: Path,
+    recordings_dir: Path,
+    cases: list[str],
+    auth_path: Path | None = None,
+) -> dict[str, str]:
     """Link every named case into the run. Returns case -> what happened."""
-    return {case: link_case(run_dir, recordings_dir, case) for case in cases}
+    auth = auth_path if auth_path is not None else run_dir.parent / "auth.json"
+    return {
+        case: link_case(run_dir, recordings_dir, case) for case in cases
+    } | {
+        f"{case}/auth.json": link_auth(recordings_dir, case, auth) for case in cases
+    }
+
+
+def link_auth(recordings_dir: Path, case: str, auth_path: Path) -> str:
+    """Point recordings/<case>/auth.json at the single system-wide auth.json.
+
+    There is one auth.json per system, at test-cases/auth.json. A recording
+    resolves ``storage_state="auth.json"`` from its own folder, so each case
+    folder gets a link to it. The link is never committed — the target is
+    gitignored, so a committed link would dangle on a fresh clone.
+    """
+    case_dir = recordings_dir / case
+    if not case_dir.is_dir():
+        return "no-case-folder"
+
+    link = case_dir / "auth.json"
+    expected = Path("..") / ".." / "test-cases" / "auth.json"
+    normalised = Path(os.path.normpath(expected))
+
+    if link.is_symlink():
+        if Path(os.path.normpath(os.readlink(link))) == normalised:
+            return "already-linked"
+        link.unlink()
+    elif link.exists():
+        return "skipped"
+
+    if not auth_path.exists():
+        return "no-auth-file"
+
+    link.symlink_to(expected)
+    return "created"
 
 
 def case_state(run_dir: Path, case: str) -> str:
