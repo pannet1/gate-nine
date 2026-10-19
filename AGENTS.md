@@ -157,48 +157,51 @@ never travels with the repo — each machine generates its own.
 ### 4.2 Record a test — human drives, machine records
 The human drives the browser. You cannot. This is a handoff.
 
-**The recording is written once, in `_template/`.** It is canonical and shared across every run:
+**Each case is one real folder in `_template/`, written once by the human:**
 
 ```
-_template/<case>.py          # the recording — written by the human, once
+_template/<case>/
+├── url.txt          # the real URL — never guessed, never assumed
+├── auth.json        # saved auth state for this case
+├── <case>.py        # the recording
+└── screenshot.png   # evidence — this name never changes
 ```
 
-**You soft-link it into the run, not copy it:**
+**You symlink the folder into each run, not the files inside it:**
 
 ```
-test-cases/<run>/<case>/<case>.py -> ../../../_template/<case>.py
+test-cases/<run>/<case>  ->  ../../_template/<case>
 ```
 
-Three levels up from `test-cases/<run>/<case>/` reaches the project root.
+Two levels up from `test-cases/<run>/` reaches the project root. One link per case.
 
-**Why a link and not a copy.** A copy means the human records the same case again for the next
-run, and the two copies drift. A link means one recording serves every run: re-record it once
-and every run picks up the new version. No duplicated work, nothing stale.
+**Why the folder, not the files.** A copy per run means the human records the same case again
+for every run and the copies drift. A folder link means the case exists once: re-record it
+once and every run picks it up. No duplicated work, nothing stale.
 
-A symlink also keeps the "is this case complete?" check honest — it is the existence of
-`<run>/<case>/<case>.py` that answers it, whether that is a link or a file.
-
-**Each run folder still holds what is genuinely per-run:**
-
-```
-test-cases/<run>/<case>/
-├── url.txt                  # the real URL — never guessed, never assumed
-├── <case>.py -> ../../../_template/<case>.py
-└── screenshot.png           # evidence — this name never changes
-```
-
-`url.txt` exists because you will not know the real route. Do not infer it from a pattern, do
-not reuse another case's URL, do not fall back to the base URL. If `url.txt` is missing, the
-URL is unknown and the step cannot proceed — ask the human for it.
-
-**Recording command** — the human records into `_template/`, and the URL comes from `url.txt`:
+**And it makes the paths resolve.** `codegen` writes `storage_state="auth.json"` and the
+screenshot line is a bare `screenshot.png` — both are relative to the working directory. Run
+the case from its own folder and they land correctly, with no path rewriting:
 
 ```bash
-uv run playwright codegen --load-storage=test-cases/<run>/auth.json -o _template/<case>.py "$(cat test-cases/<run>/<case>/url.txt)"
+cd /home/pannet1/gate-nine/test-cases/<run>/<case> && uv run python <case>.py
 ```
 
-The human clicks through the flow. Every action is captured. Then you create the symlink and
-append the screenshot line (§4.3).
+Following the symlink, that working directory *is* `_template/<case>/`. So `auth.json` is
+found and `screenshot.png` is written beside the recording, under its fixed name, with no
+collision between cases.
+
+It also keeps the completion check honest — `test-cases/<run>/<case>/<case>.py` existing is
+what answers "is this case done", link or file.
+
+**Recording command** — the human records into the case folder, and the URL comes from `url.txt`:
+
+```bash
+uv run playwright codegen --load-storage=_template/<case>/auth.json -o _template/<case>/<case>.py "$(cat _template/<case>/url.txt)"
+```
+
+The human clicks through the flow. Every action is captured. Then you append the screenshot
+line (§4.3).
 
 ### 4.3 Append the screenshot line — your job, after recording
 
@@ -240,15 +243,16 @@ What it does, per run folder:
 1. Find the highest-numbered folder under `test-cases/`.
 2. Require the `.md` brief. Without it, stop.
 3. Find every `<case>/` subfolder and run each `<case>.py` inside it, sequentially.
-4. Each recording loads the run's `auth.json` and runs `headless=False`.
+4. `cd` into the case folder before running it. The recordings use bare relative
+   paths — `storage_state="auth.json"` and `screenshot.png` — so the working
+   directory must be the case folder for them to resolve.
 5. One test at a time. Never parallel — the tenant is shared state.
-6. `screenshot.png` lands in that case's own folder.
-7. When every test finishes, the loop breaks and reports.
+6. When every case finishes, the loop breaks and reports.
 
-A single test can also be run on its own:
+A single case can also be run on its own:
 
 ```bash
-cd /home/pannet1/gate-nine && uv run python test-cases/001/sales-invoice/sales-invoice.py
+cd /home/pannet1/gate-nine/test-cases/001/sales-invoice && uv run python sales-invoice.py
 ```
 
 ### 5.1 Never hand over a placeholder command
