@@ -225,31 +225,47 @@ recordings/sales-invoice.py     ← a file, not a folder
 mechanical part — do not hand-organise files by hand:
 
 ```bash
-# one case into one run — the command you hand the human
 cd /home/pannet1/gate-nine && uv run python -m app.tidy sales-invoice 001
-
-# every case into the latest run
-cd /home/pannet1/gate-nine && uv run python -m app.tidy
-
-# report without touching disk
-cd /home/pannet1/gate-nine && uv run python -m app.tidy sales-invoice 001 --dry-run
 ```
 
-`<case> <run_id>` does everything that one case still needs and touches nothing else — a
-sibling case sitting flat is left for its own invocation.
+**You run this, once per case.** The human does not. Name the cases from the brief, then loop
+this over them in order until every rule is satisfied. It does everything that one case still
+needs and touches nothing else — a sibling case sitting flat is left for its own invocation.
 
-It gives every loose `recordings/<case>.py` its folder, renames a recording whose name drifted
-from its folder (`effort-hours/effort-hour.py` → `effort-hours/effort-hours.py`), symlinks each
-case folder into the run, writes `session.md`, and reports what it did. A case with two
-recordings is ambiguous — it reports and touches nothing. It is idempotent — a second pass
-reports `already-linked` and changes nothing. `--dry-run` reports without touching disk.
+`--dry-run` reports without moving anything.
 
-The filename is the case name. Do not ask the human to rename it, do not reject the work, do
-not make them record it again. Tidy it yourself, then carry on.
+### The case list lives in `cases.yml`
 
-`tidy` refuses to overwrite: a real directory sitting where a link belongs is reported as
-`skipped` and left alone. Only stop and ask the human when you genuinely cannot tell what
-something is.
+Your interpretation of the brief is written to `test-cases/<run>/cases.yml`. The human may
+correct it afterwards, so **`cases.yml` wins over anything you inferred** and is never
+overwritten. **A correction there is not a discrepancy. Do not stop for it** — re-read the file
+and carry on.
+
+### Stop only on a discrepancy that needs a human
+
+Run autonomously until every rule is satisfied. The only thing that stops you is work no code
+can do — recording a case, supplying a URL. Then stop, and hand over the command.
+
+`needs` is the signal; `commands` is how to clear it. **Never report a discrepancy without the
+command that resolves it.**
+
+```json
+{ "case": "effort-hours", "state": "pending",
+  "needs": ["recording", "url"],
+  "commands": [
+    "echo '<work-url>' > recordings/effort-hours/url.txt",
+    "uv run playwright codegen --load-storage=./recordings/auth.json -o recordings/effort-hours/effort-hours.py",
+    "uv run python -m app.tidy effort-hours 002"
+  ] }
+```
+
+`needs: []` means the case is done — next case, no comment. Anything in `needs` means stop,
+hand over `commands`, and wait. Do not work around it, do not continue to later cases, do not
+report the run as progressing past it.
+
+A case with two recordings is ambiguous — `tidy` reports it and touches nothing, and that is a
+discrepancy you hand over. A real directory where a link belongs is reported `skipped` and left
+alone, and is not a discrepancy.
 
 ### 4.4 Append the screenshot line — your job, after recording
 
