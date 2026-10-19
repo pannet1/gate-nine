@@ -11,7 +11,8 @@ from what exists in ``recordings/``, or from ``--cases``.
 What it does, in order:
 
 1. **Tidy** — a loose ``recordings/<case>.py`` becomes ``recordings/<case>/<case>.py``,
-   and a recording whose name drifted from its folder is renamed to match.
+   a recording whose name drifted from its folder is renamed to match, and its
+   ``storage_state`` is pointed at the single system-wide ``auth.json``.
 2. **Link** — each case with a template folder gets a symlink at
    ``test-cases/<run>/<case> -> ../../recordings/<case>``.
 3. **Report** — every case is complete or not, and ``session.md`` is rewritten
@@ -26,6 +27,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -129,49 +131,35 @@ def link_case(run_dir: Path, recordings_dir: Path, case: str) -> str:
     return "created"
 
 
-def link_cases(
-    run_dir: Path,
-    recordings_dir: Path,
-    cases: list[str],
-    auth_path: Path | None = None,
-) -> dict[str, str]:
+def link_cases(run_dir: Path, recordings_dir: Path, cases: list[str]) -> dict[str, str]:
     """Link every named case into the run. Returns case -> what happened."""
-    auth = auth_path if auth_path is not None else run_dir.parent / "auth.json"
-    return {
-        case: link_case(run_dir, recordings_dir, case) for case in cases
-    } | {
-        f"{case}/auth.json": link_auth(recordings_dir, case, auth) for case in cases
-    }
+    return {case: link_case(run_dir, recordings_dir, case) for case in cases}
 
 
-def link_auth(recordings_dir: Path, case: str, auth_path: Path) -> str:
-    """Point recordings/<case>/auth.json at the single system-wide auth.json.
+AUTH_RELATIVE = "../../test-cases/auth.json"
 
-    There is one auth.json per system, at test-cases/auth.json. A recording
-    resolves ``storage_state="auth.json"`` from its own folder, so each case
-    folder gets a link to it. The link is never committed — the target is
-    gitignored, so a committed link would dangle on a fresh clone.
+
+def point_recording_at_auth(recordings_dir: Path, case: str) -> str:
+    """Rewrite a recording's storage_state to the one system-wide auth.json.
+
+    There is one auth file per system, at test-cases/auth.json. A case folder
+    resolves to recordings/<case>/, so from there the file is
+    ../../test-cases/auth.json. codegen writes a bare "auth.json", which
+    resolves to nothing — fix it rather than copy the secret into every folder.
     """
-    case_dir = recordings_dir / case
-    if not case_dir.is_dir():
-        return "no-case-folder"
+    recording = recordings_dir / case / f"{case}{RECORDING_SUFFIX}"
+    if not recording.is_file():
+        return "no-recording"
 
-    link = case_dir / "auth.json"
-    expected = Path("..") / ".." / "test-cases" / "auth.json"
-    normalised = Path(os.path.normpath(expected))
+    source = recording.read_text(encoding="utf-8")
+    pattern = r"""(storage_state=)(["'])auth\.json(["'])"""
+    if not re.search(pattern, source):
+        return "nothing-to-rewrite"
 
-    if link.is_symlink():
-        if Path(os.path.normpath(os.readlink(link))) == normalised:
-            return "already-linked"
-        link.unlink()
-    elif link.exists():
-        return "skipped"
-
-    if not auth_path.exists():
-        return "no-auth-file"
-
-    link.symlink_to(expected)
-    return "created"
+    updated = re.sub(pattern, rf"\g<1>\g<2>{AUTH_RELATIVE}\g<3>", source)
+    if updated != source:
+        recording.write_text(updated, encoding="utf-8")
+    return "rewritten"
 
 
 def case_state(run_dir: Path, case: str) -> str:
@@ -266,6 +254,11 @@ def prepare(
         ]
 
     names = cases if cases is not None else case_folders(recordings_dir)
+    auth_fixed = (
+        {}
+        if dry_run
+        else {case: point_recording_at_auth(recordings_dir, case) for case in names}
+    )
     links = {} if dry_run else link_cases(run_dir, recordings_dir, names)
     session = run_dir / SESSION_FILENAME
     if not dry_run:
@@ -279,6 +272,7 @@ def prepare(
         "brief": brief.name if brief else None,
         "tidied": tidied,
         "renamed": renamed,
+        "auth_fixed": auth_fixed,
         "linked": links,
         "states": states,
         "pending": [case for case in names if states[case] == "pending"],

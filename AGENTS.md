@@ -152,10 +152,10 @@ Login is never part of a test. There is **one `auth.json` per system**, at
 uv run playwright codegen --save-storage=test-cases/auth.json https://<tenant>/login/
 ```
 
-The human logs in by hand, then closes. A recording resolves `storage_state="auth.json"`
-from its own folder, so `app.tidy` links each `recordings/<case>/auth.json` to that one file.
-Those links are never committed — the target is gitignored, so a committed link would dangle
-on a fresh clone.
+The human logs in by hand, then closes. `codegen` writes a bare `storage_state="auth.json"`,
+which resolves to nothing from a case folder. `app.tidy` rewrites that line to
+`../../test-cases/auth.json` — the one real file, never copied and never symlinked into case
+folders.
 
 `auth.json` is machine-local and never travels with the repo — each machine generates its own.
 
@@ -168,7 +168,6 @@ The human drives the browser. You cannot. This is a handoff.
 recordings/<case>/
 ├── url.txt          # the real URL — never guessed, never assumed
 ├── <case>.py        # the recording
-├── auth.json        # -> ../../test-cases/auth.json — one per system, gitignored
 └── screenshot.png   # evidence — this name never changes
 ```
 

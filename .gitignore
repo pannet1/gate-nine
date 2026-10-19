@@ -47,5 +47,3 @@ dist/
 build/
 *.egg-info/
 
-# One auth.json per system, linked into each case folder at tidy time — never committed
-recordings/*/auth.json

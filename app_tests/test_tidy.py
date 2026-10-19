@@ -11,9 +11,10 @@ import unittest
 from pathlib import Path
 
 from app.tidy import (
+    AUTH_RELATIVE,
     case_folders,
-    link_auth,
     normalise_recordings,
+    point_recording_at_auth,
     case_state,
     link_case,
     link_cases,
@@ -207,59 +208,61 @@ class LinkCaseTests(TempTree):
 
         report = link_cases(self.run_dir, self.recordings, ["one", "two", "three"])
 
-        self.assertEqual(report["one"], "created")
-        self.assertEqual(report["two"], "created")
-        self.assertEqual(report["three"], "created")
-        self.assertEqual(report["one/auth.json"], "created")
-        self.assertEqual(report["two/auth.json"], "created")
-        self.assertEqual(
-            report["three/auth.json"], "no-case-folder",
-            "a case with no folder has nothing to put auth.json in",
-        )
+        self.assertEqual(report, {"one": "created", "two": "created", "three": "created"})
 
 
-class LinkAuthTests(TempTree):
-    """One auth.json per system, linked into each case folder."""
+class PointRecordingAtAuthTests(TempTree):
+    """One auth.json per system; the recording is pointed at it."""
 
     def setUp(self) -> None:
         super().setUp()
         self.run_dir = self.make_run()
-        self.auth = self.runs / "auth.json"
-        self.auth.write_text('{"cookies": []}', encoding="utf-8")
+        self.case_dir = self.make_case("subtasks")
+        (self.case_dir / "subtasks.py").write_text(
+            "def run(playwright):\n"
+            '    context = browser.new_context(storage_state="auth.json")\n',
+            encoding="utf-8",
+        )
 
-    def test_case_folder_gets_a_link_to_the_single_auth_file(self) -> None:
-        self.make_case("subtasks")
+    def test_bare_auth_json_is_rewritten_to_the_system_path(self) -> None:
+        result = point_recording_at_auth(self.recordings, "subtasks")
 
-        result = link_auth(self.recordings, "subtasks", self.auth)
+        self.assertEqual(result, "rewritten")
+        self.assertIn(
+            'storage_state="../../test-cases/auth.json"',
+            (self.case_dir / "subtasks.py").read_text(encoding="utf-8"),
+        )
 
-        self.assertEqual(result, "created")
-        link = self.recordings / "subtasks" / "auth.json"
-        self.assertTrue(link.is_symlink())
-        self.assertEqual(Path(os.readlink(link)), Path("../../test-cases/auth.json"))
-        self.assertTrue(link.resolve().is_file())
+    def test_single_quotes_are_handled_too(self) -> None:
+        (self.case_dir / "subtasks.py").write_text(
+            "context = browser.new_context(storage_state='auth.json')\n", encoding="utf-8"
+        )
 
-    def test_linking_twice_changes_nothing(self) -> None:
-        self.make_case("subtasks")
+        point_recording_at_auth(self.recordings, "subtasks")
 
-        self.assertEqual(link_auth(self.recordings, "subtasks", self.auth), "created")
-        self.assertEqual(link_auth(self.recordings, "subtasks", self.auth), "already-linked")
+        self.assertIn(
+            "storage_state='../../test-cases/auth.json'",
+            (self.case_dir / "subtasks.py").read_text(encoding="utf-8"),
+        )
 
-    def test_missing_auth_file_is_reported_not_raised(self) -> None:
-        self.make_case("subtasks")
-        self.auth.unlink()
+    def test_rewriting_twice_is_a_no_op(self) -> None:
+        point_recording_at_auth(self.recordings, "subtasks")
 
-        self.assertEqual(link_auth(self.recordings, "subtasks", self.auth), "no-auth-file")
-        self.assertFalse((self.recordings / "subtasks" / "auth.json").exists())
+        self.assertEqual(point_recording_at_auth(self.recordings, "subtasks"), "nothing-to-rewrite")
 
-    def test_a_real_auth_file_in_the_case_folder_is_never_replaced(self) -> None:
-        case_dir = self.make_case("subtasks")
-        (case_dir / "auth.json").write_text('{"mine": true}', encoding="utf-8")
+    def test_missing_recording_is_reported(self) -> None:
+        self.assertEqual(
+            point_recording_at_auth(self.recordings, "absent"), "no-recording"
+        )
 
-        self.assertEqual(link_auth(self.recordings, "subtasks", self.auth), "skipped")
-        self.assertFalse((case_dir / "auth.json").is_symlink())
+    def test_the_rewritten_path_actually_resolves(self) -> None:
+        """The whole point: the recording must find the one auth file at run time."""
+        (self.runs / "auth.json").write_text("{}", encoding="utf-8")
+        point_recording_at_auth(self.recordings, "subtasks")
+        link_case(self.run_dir, self.recordings, "subtasks")
 
-    def test_no_case_folder_is_reported(self) -> None:
-        self.assertEqual(link_auth(self.recordings, "absent", self.auth), "no-case-folder")
+        run_dir = os.path.realpath(self.run_dir / "subtasks")
+        self.assertTrue(os.path.isfile(os.path.join(run_dir, AUTH_RELATIVE)))
 
 
 class CaseStateTests(TempTree):
@@ -385,8 +388,7 @@ class PrepareTests(TempTree):
 
         self.assertEqual(first["tidied"], [])
         self.assertEqual(second["tidied"], [])
-        self.assertEqual(second["linked"]["subtasks"], "already-linked")
-        self.assertEqual(second["linked"]["subtasks/auth.json"], "already-linked")
+        self.assertEqual(second["linked"], {"subtasks": "already-linked"})
 
     def test_dry_run_changes_nothing_on_disk(self) -> None:
         self.make_run()
