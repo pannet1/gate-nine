@@ -15,6 +15,8 @@ from app.tidy import (
     case_folders,
     normalise_recordings,
     point_recording_at_auth,
+    read_cases,
+    write_cases,
     tidy_one_case,
     case_state,
     link_case,
@@ -577,6 +579,106 @@ class TidyOneCaseTests(TempTree):
 
         text = (self.runs / "002" / "session.md").read_text(encoding="utf-8")
         self.assertIn("`effort-hours`", text)
+
+
+class CasesYmlTests(TempTree):
+    """cases.yml is the human-correctable case list. Never a reason to stop."""
+
+    def test_it_is_written_from_discovered_cases_when_absent(self) -> None:
+        run_dir = self.make_run()
+        self.make_case("subtasks")
+        self.make_case("attachments")
+
+        write_cases(run_dir, ["attachments", "subtasks"])
+
+        text = (run_dir / "cases.yml").read_text(encoding="utf-8")
+        self.assertIn("attachments", text)
+        self.assertIn("subtasks", text)
+
+    def test_reading_returns_none_when_absent(self) -> None:
+        self.assertIsNone(read_cases(self.make_run()))
+
+    def test_an_existing_file_is_never_overwritten(self) -> None:
+        run_dir = self.make_run()
+        (run_dir / "cases.yml").write_text("cases:\n  - human-picked\n", encoding="utf-8")
+
+        write_cases(run_dir, ["something-else"])
+
+        self.assertEqual(read_cases(run_dir), ["human-picked"])
+
+    def test_bare_list_form_is_accepted(self) -> None:
+        run_dir = self.make_run()
+        (run_dir / "cases.yml").write_text("- one\n- two\n", encoding="utf-8")
+
+        self.assertEqual(read_cases(run_dir), ["one", "two"])
+
+    def test_malformed_yaml_is_reported_as_absent_not_raised(self) -> None:
+        run_dir = self.make_run()
+        (run_dir / "cases.yml").write_text("cases: [unclosed\n", encoding="utf-8")
+
+        self.assertIsNone(read_cases(run_dir))
+
+    def test_prepare_prefers_the_human_list_over_the_filesystem(self) -> None:
+        run_dir = self.make_run()
+        self.make_case("on-disk")
+        (run_dir / "cases.yml").write_text("cases:\n  - human-picked\n", encoding="utf-8")
+
+        report = prepare(runs_root=self.runs, recordings_dir=self.recordings)
+
+        self.assertEqual(list(report["states"]), ["human-picked"])
+
+    def test_prepare_writes_cases_yml_when_there_is_none(self) -> None:
+        run_dir = self.make_run()
+        self.make_case("subtasks")
+
+        prepare(runs_root=self.runs, recordings_dir=self.recordings)
+
+        self.assertTrue((run_dir / "cases.yml").is_file())
+        self.assertEqual(read_cases(run_dir), ["subtasks"])
+
+
+class StopSignalTests(TempTree):
+    """Every discrepancy the AI stops on carries a command that clears it."""
+
+    def test_a_case_needing_a_recording_reports_how_to_make_one(self) -> None:
+        self.make_run("002")
+        self.make_case("effort-hours", recording=False)
+        (self.recordings / "auth.json").write_text("{}", encoding="utf-8")
+
+        report = tidy_one_case(
+            "effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings
+        )
+
+        self.assertEqual(report["state"], "pending")
+        self.assertIn("recording", report["needs"])
+        self.assertTrue(
+            any("playwright codegen" in c for c in report["commands"]),
+            f"a missing recording must come with the command to make it: {report['commands']}",
+        )
+        self.assertIn("uv run python -m app.tidy effort-hours 002", report["commands"])
+
+    def test_a_missing_url_reports_how_to_supply_it(self) -> None:
+        self.make_run("002")
+        self.make_case("effort-hours", recording=False, url=False)
+
+        report = tidy_one_case(
+            "effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings
+        )
+
+        self.assertIn("url", report["needs"])
+        self.assertTrue(any("url.txt" in c for c in report["commands"]))
+
+    def test_a_complete_case_needs_nothing_and_offers_no_command(self) -> None:
+        self.make_run("002")
+        self.make_case("effort-hours")
+
+        report = tidy_one_case(
+            "effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings
+        )
+
+        self.assertEqual(report["state"], "complete")
+        self.assertEqual(report["needs"], [])
+        self.assertEqual(report["commands"], [])
 
 
 if __name__ == "__main__":

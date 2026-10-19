@@ -32,10 +32,13 @@ import re
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from .planner import find_brief
 
 RECORDING_SUFFIX = ".py"
 SESSION_FILENAME = "session.md"
+CASES_FILENAME = "cases.yml"
 DEFAULT_RUNS_ROOT = Path("test-cases")
 DEFAULT_RECORDINGS_DIR = Path("recordings")
 
@@ -259,11 +262,76 @@ def write_session(run_dir: Path, brief: Path | None, cases: list[str], recording
     return session
 
 
+def read_cases(run_dir: Path) -> list[str] | None:
+    """Read cases.yml if it exists — the human may have corrected it.
+
+    Returns None when there is no file yet. Never raises on a bad file: a
+    malformed cases.yml is a discrepancy to report, not a crash.
+    """
+    path = run_dir / CASES_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return None
+    if isinstance(data, list) and all(isinstance(item, str) for item in data):
+        return data
+    if isinstance(data, dict) and isinstance(data.get("cases"), list):
+        return [c for c in data["cases"] if isinstance(c, str)]
+    return None
+
+
+def write_cases(run_dir: Path, cases: list[str]) -> Path:
+    """Record the interpreted case list so the human can correct it.
+
+    Written only when absent — an existing cases.yml is the human's and is
+    never overwritten.
+    """
+    path = run_dir / CASES_FILENAME
+    if path.exists():
+        return path
+    header = (
+        "# Cases interpreted from the brief.\n"
+        "# Correct this freely — the run reads this file in preference to\n"
+        "# anything inferred, and never overwrites it.\n"
+    )
+    path.write_text(
+        header + yaml.safe_dump({"cases": list(cases)}, sort_keys=False, allow_unicode=True),
+        encoding="utf-8",
+    )
+    return path
+
+
 def cases_in_run(run_dir: Path, recordings_dir: Path) -> list[str]:
     """Case names for a run's session file: whatever is linked plus what exists."""
     linked = [entry.name for entry in sorted(run_dir.iterdir()) if entry.is_symlink()]
     available = case_folders(recordings_dir)
     return sorted(dict.fromkeys(linked + available))
+
+
+def _resolve_commands(
+    missing: list[str], case: str, run_id: str, runs_root: Path
+) -> list[str]:
+    """Runnable commands for whatever the human still has to do.
+
+    Every discrepancy the AI stops on comes with the command that clears it.
+    Nothing is reported as blocked without a way to unblock it.
+    """
+    commands: list[str] = []
+    if "url" in missing:
+        case_dir = runs_root.parent / "recordings" / case
+        commands.append(
+            f"echo '<work-url>' > {case_dir}/url.txt"
+        )
+    if "recording" in missing:
+        case_dir = runs_root.parent / "recordings" / case
+        commands.append(
+            f'uv run playwright codegen --load-storage={runs_root.parent}/recordings/auth.json '
+            f'-o {case_dir}/{case}.py "$(cat {case_dir}/url.txt)"'
+        )
+        commands.append(f"uv run python -m app.tidy {case} {run_id}")
+    return commands
 
 
 def _what_is_missing(recordings_dir: Path, case: str, url: bool) -> list[str]:
@@ -323,6 +391,7 @@ def tidy_one_case(
 
     state = case_state(run_dir, case)
     has_url = (recordings_dir / case / "url.txt").exists()
+    missing = _what_is_missing(recordings_dir, case, has_url)
     return {
         "action": "prepared",
         "dry_run": False,
@@ -335,8 +404,10 @@ def tidy_one_case(
         "linked": linked,
         "system_auth": system_auth,
         "state": state,
-        # The stop signal for the loop. Anything not "done" is a human step.
-        "needs": [] if state == "complete" else _what_is_missing(recordings_dir, case, url),
+        # The stop signal for the loop. Anything not empty is a human step, and
+        # `commands` carries exactly how to resolve each one.
+        "needs": missing,
+        "commands": _resolve_commands(missing, case, run_id, runs_root),
         "session": str(run_dir / SESSION_FILENAME),
     }
 
@@ -372,7 +443,16 @@ def prepare(
             if e.is_file()
         ]
 
-    names = cases if cases is not None else case_folders(recordings_dir)
+    declared = read_cases(run_dir)
+    if declared is not None:
+        # The human's list wins over anything inferred. Never a reason to stop.
+        names = declared
+    elif cases is not None:
+        names = cases
+    else:
+        names = case_folders(recordings_dir)
+        if names:
+            write_cases(run_dir, names)
     auth_fixed = (
         {}
         if dry_run
