@@ -266,6 +266,16 @@ def cases_in_run(run_dir: Path, recordings_dir: Path) -> list[str]:
     return sorted(dict.fromkeys(linked + available))
 
 
+def _what_is_missing(recordings_dir: Path, case: str, url: bool) -> list[str]:
+    """What a human still has to do for this case."""
+    missing: list[str] = []
+    if not (recordings_dir / case / f"{case}{RECORDING_SUFFIX}").exists():
+        missing.append("recording")
+    if not url:
+        missing.append("url")
+    return missing
+
+
 def tidy_one_case(
     case: str,
     run_id: str,
@@ -311,6 +321,8 @@ def tidy_one_case(
     all_cases = cases_in_run(run_dir, recordings_dir)
     write_session(run_dir, brief, all_cases, recordings_dir)
 
+    state = case_state(run_dir, case)
+    has_url = (recordings_dir / case / "url.txt").exists()
     return {
         "action": "prepared",
         "dry_run": False,
@@ -322,7 +334,9 @@ def tidy_one_case(
         "auth_fixed": auth_fixed,
         "linked": linked,
         "system_auth": system_auth,
-        "state": case_state(run_dir, case),
+        "state": state,
+        # The stop signal for the loop. Anything not "done" is a human step.
+        "needs": [] if state == "complete" else _what_is_missing(recordings_dir, case, url),
         "session": str(run_dir / SESSION_FILENAME),
     }
 
