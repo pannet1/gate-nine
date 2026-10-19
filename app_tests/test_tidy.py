@@ -69,8 +69,7 @@ class TidyTemplateTests(TempTree):
 
         moved = tidy_recordings(self.recordings)
 
-        self.assertEqual(len(moved), 1)
-        self.assertEqual(moved[0]["case"], "sales-invoice")
+        self.assertEqual(moved, ["sales-invoice"])
         self.assertFalse(loose.exists(), "the flat file should be gone")
         self.assertTrue((self.recordings / "sales-invoice" / "sales-invoice.py").is_file())
 
@@ -114,8 +113,7 @@ class NormaliseRecordingTests(TempTree):
 
         fixed = normalise_recordings(self.recordings)
 
-        self.assertEqual(len(fixed), 1)
-        self.assertEqual(fixed[0]["case"], "effort-hours")
+        self.assertEqual(fixed, ["effort-hours"])
         self.assertTrue((case_dir / "effort-hours.py").is_file())
         self.assertFalse((case_dir / "effort-hour.py").exists())
 
@@ -131,7 +129,8 @@ class NormaliseRecordingTests(TempTree):
 
         fixed = normalise_recordings(self.recordings)
 
-        self.assertEqual(len(fixed[0]["ambiguous"]), 2)
+        self.assertEqual(len(fixed), 1)
+        self.assertIn("ambiguous", fixed[0])
         self.assertTrue((case_dir / "effort-hour.py").is_file(), "nothing may be renamed")
         self.assertTrue((case_dir / "other.py").is_file())
 
@@ -368,8 +367,7 @@ class SessionTests(TempTree):
         self.assertIn("- [x] `done-case` — complete", text)
         self.assertIn("- [ ] `todo-case` — pending", text)
 
-    def test_session_names_the_blocker_when_url_is_missing(self) -> None:
-        """Unrecorded and no URL: the human cannot record it yet."""
+    def test_session_names_the_first_pending_case(self) -> None:
         run_dir = self.make_run()
         self.make_case("effort-hours", recording=False, url=False)
         link_cases(run_dir, self.recordings, ["effort-hours"])
@@ -377,19 +375,16 @@ class SessionTests(TempTree):
         text = render_session(run_dir, None, ["effort-hours"], self.recordings)
 
         self.assertIn("Working on: `effort-hours`", text)
-        self.assertIn("url.txt", text)
-        self.assertIn("do not infer it", text)
 
-    def test_a_recorded_case_is_not_blocked_on_a_url(self) -> None:
-        """The recording already carries its URL in page.goto(). Nothing is blocked."""
+    def test_a_recorded_case_is_not_pending_without_a_url(self) -> None:
+        """The recording carries its URL in page.goto(); no url.txt is needed."""
         run_dir = self.make_run()
         self.make_case("effort-hours", url=False)
         link_cases(run_dir, self.recordings, ["effort-hours"])
 
         text = render_session(run_dir, None, ["effort-hours"], self.recordings)
 
-        self.assertNotIn("Blocked", text)
-        self.assertIn("The loop is done for this run", text)
+        self.assertIn("Every case has a recording.", text)
 
     def test_session_does_not_claim_a_blocker_when_url_exists(self) -> None:
         run_dir = self.make_run()
@@ -407,7 +402,7 @@ class SessionTests(TempTree):
 
         text = render_session(run_dir, None, ["all-done"], self.recordings)
 
-        self.assertIn("The loop is done for this run", text)
+        self.assertIn("Every case has a recording.", text)
 
     def test_write_session_replaces_rather_than_appends(self) -> None:
         run_dir = self.make_run()
@@ -435,8 +430,8 @@ class PrepareTests(TempTree):
         self.assertEqual(report["action"], "prepared")
         self.assertEqual(report["run_id"], "002")
         self.assertEqual(report["brief"], "Work Platform — Test Manual.md")
-        self.assertEqual([t["case"] for t in report["tidied"]], ["effort-hours"])
-        self.assertEqual(report["states"]["subtasks"], "complete")
+        self.assertEqual(report["linked"], 2)
+        self.assertEqual(report["missing_py"], [])
         self.assertTrue((self.runs / "002" / "subtasks").is_symlink())
         self.assertTrue((self.runs / "002" / "session.md").is_file())
 
@@ -448,9 +443,9 @@ class PrepareTests(TempTree):
         first = prepare(runs_root=self.runs, recordings_dir=self.recordings)
         second = prepare(runs_root=self.runs, recordings_dir=self.recordings)
 
-        self.assertEqual(first["tidied"], [])
-        self.assertEqual(second["tidied"], [])
-        self.assertEqual(second["linked"], {"subtasks": "already-linked"})
+        self.assertEqual(first["linked"], 1)
+        self.assertEqual(second["linked"], 1)
+        self.assertEqual(second["missing_py"], [])
 
     def test_dry_run_changes_nothing_on_disk(self) -> None:
         self.make_run()
@@ -494,7 +489,7 @@ class PrepareTests(TempTree):
             runs_root=self.runs, recordings_dir=self.recordings, cases=["named-explicitly"]
         )
 
-        self.assertEqual(list(report["states"]), ["named-explicitly"])
+        self.assertEqual(report["missing_py"], [])
 
     def test_missing_run_id_is_reported_not_raised(self) -> None:
         report = prepare(runs_root=self.runs, recordings_dir=self.recordings, run_id="099")
@@ -534,8 +529,9 @@ class TidyOneCaseTests(TempTree):
         report = tidy_one_case("effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings)
 
         self.assertEqual(report["action"], "prepared")
-        self.assertEqual(report["state"], "complete")
-        self.assertEqual([t["case"] for t in report["tidied"]], ["effort-hours"])
+        self.assertEqual(report["linked"], "created")
+        self.assertEqual(report["missing_py"], [])
+        self.assertEqual(report["ask_url_for"], ["effort-hours"], "no url.txt yet")
         self.assertTrue((self.recordings / "effort-hours" / "effort-hours.py").is_file())
         self.assertTrue((self.runs / "002" / "effort-hours").is_symlink())
         self.assertTrue((self.runs / "002" / "session.md").is_file())
@@ -625,7 +621,7 @@ class CasesYmlTests(TempTree):
 
         report = prepare(runs_root=self.runs, recordings_dir=self.recordings)
 
-        self.assertEqual(list(report["states"]), ["human-picked"])
+        self.assertEqual(report["missing_py"], ["human-picked"])
 
     def test_prepare_writes_cases_yml_when_there_is_none(self) -> None:
         run_dir = self.make_run()
@@ -640,35 +636,29 @@ class CasesYmlTests(TempTree):
 class StopSignalTests(TempTree):
     """Every discrepancy the AI stops on carries a command that clears it."""
 
-    def test_a_case_needing_a_recording_reports_how_to_make_one(self) -> None:
+    def test_a_case_with_no_py_is_the_only_complaint(self) -> None:
         self.make_run("002")
-        self.make_case("effort-hours", recording=False)
-        (self.recordings / "auth.json").write_text("{}", encoding="utf-8")
 
         report = tidy_one_case(
             "effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings
         )
 
-        self.assertEqual(report["state"], "pending")
-        self.assertIn("recording", report["needs"])
-        self.assertTrue(
-            any("playwright codegen" in c for c in report["commands"]),
-            f"a missing recording must come with the command to make it: {report['commands']}",
-        )
-        self.assertIn("uv run python -m app.tidy effort-hours 002", report["commands"])
+        self.assertEqual(report["missing_py"], ["effort-hours"])
+        self.assertEqual(report["linked"], "skipped")
 
-    def test_a_missing_url_reports_how_to_supply_it(self) -> None:
+    def test_a_linked_case_with_no_url_is_what_to_ask_for(self) -> None:
         self.make_run("002")
-        self.make_case("effort-hours", recording=False, url=False)
+        self.make_case("effort-hours", url=False)
 
         report = tidy_one_case(
             "effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings
         )
 
-        self.assertIn("url", report["needs"])
+        self.assertEqual(report["missing_py"], [])
+        self.assertEqual(report["ask_url_for"], ["effort-hours"])
         self.assertTrue(any("url.txt" in c for c in report["commands"]))
 
-    def test_a_complete_case_needs_nothing_and_offers_no_command(self) -> None:
+    def test_a_fully_set_up_case_asks_for_nothing(self) -> None:
         self.make_run("002")
         self.make_case("effort-hours")
 
@@ -676,9 +666,21 @@ class StopSignalTests(TempTree):
             "effort-hours", "002", runs_root=self.runs, recordings_dir=self.recordings
         )
 
-        self.assertEqual(report["state"], "complete")
-        self.assertEqual(report["needs"], [])
+        self.assertEqual(report["missing_py"], [])
+        self.assertEqual(report["ask_url_for"], [])
         self.assertEqual(report["commands"], [])
+
+    def test_batch_reports_the_same_three_ways(self) -> None:
+        self.make_run("002")
+        self.make_case("ready")           # has py and url -> linked silently
+        self.make_case("needs-url", url=False)   # linked, ask for url
+        self.make_case("ghost", recording=False, url=False)   # nothing -> missing_py
+
+        report = prepare(runs_root=self.runs, recordings_dir=self.recordings, run_id="002")
+
+        self.assertEqual(report["linked"], 2)
+        self.assertEqual(report["missing_py"], ["ghost"])
+        self.assertEqual(report["ask_url_for"], ["needs-url"])
 
 
 if __name__ == "__main__":

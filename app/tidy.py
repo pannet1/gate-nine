@@ -1,26 +1,18 @@
-"""Tidy the workspace: give loose recordings a case folder, link them into the
-run, and report what state the run is in.
+"""Bring recordings into a run: move loose files into case folders, link them,
+and report only what genuinely needs a human.
 
-This is the mechanical part of the loop, done in code rather than by judgement
-on every pass (index.html §4). It never interprets prose — the case names come
-from what exists in ``recordings/``, or from ``--cases``.
+    uv run python -m app.tidy sales-invoice 001   one case into one run
+    uv run python -m app.tidy                      every case into the latest run
+    uv run python -m app.tidy ... --dry-run       report without moving anything
 
-    uv run python -m app.tidy
-    uv run python -m app.tidy --dry-run
+The rule is deliberately small:
 
-What it does, in order:
+    a case that has a recording  -> linked, silently
+    a case that has none         -> the only thing worth complaining about
+    a linked case with no url.txt -> what to ask the human for next
 
-1. **Auth** — ``test-cases/auth.json`` points at the one real ``recordings/auth.json``.
-2. **Tidy** — a loose ``recordings/<case>.py`` becomes ``recordings/<case>/<case>.py``,
-   a recording whose name drifted from its folder is renamed to match, and its
-   ``storage_state`` is pointed at the single system-wide ``auth.json``.
-3. **Link** — each case with a recordings folder gets a symlink at
-   ``test-cases/<run>/<case> -> ../../recordings/<case>``.
-4. **Report** — every case is complete or not, and ``session.md`` is rewritten
-   with that state.
-
-Safety: a recording is never deleted or overwritten. A link is never replaced by
-a copy. Every step is idempotent, so running it twice is a no-op.
+Nothing is inferred from prose. The case list is read from cases.yml when it
+exists, and written from what is on disk only when it does not.
 """
 
 from __future__ import annotations
@@ -29,12 +21,13 @@ import argparse
 import json
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from .planner import find_brief
+from .planner import find_brief, find_latest_run
 
 RECORDING_SUFFIX = ".py"
 SESSION_FILENAME = "session.md"
@@ -42,231 +35,20 @@ CASES_FILENAME = "cases.yml"
 DEFAULT_RUNS_ROOT = Path("test-cases")
 DEFAULT_RECORDINGS_DIR = Path("recordings")
 
-
-def tidy_recordings(recordings_dir: Path, cases: list[str] | None = None) -> list[dict[str, Any]]:
-    """Give every loose ``<case>.py`` in recordings_dir its own case folder.
-
-    Returns one record per file moved. A file already inside a case folder is
-    left alone — this only picks up recordings sitting flat in recordings_dir.
-    """
-    moved: list[dict[str, Any]] = []
-    if not recordings_dir.is_dir():
-        return moved
-
-    for entry in sorted(recordings_dir.iterdir()):
-        if not entry.is_file() or entry.suffix != RECORDING_SUFFIX:
-            continue
-        case = entry.stem
-        if cases is not None and case not in cases:
-            continue
-        case_dir = recordings_dir / case
-        case_dir.mkdir(exist_ok=True)
-        destination = case_dir / entry.name
-        entry.replace(destination)
-        moved.append({"case": case, "from": str(entry), "to": str(destination)})
-    return moved
-
-
-def normalise_recordings(recordings_dir: Path, cases: list[str] | None = None) -> list[dict[str, Any]]:
-    """Make each case folder's recording match its folder name.
-
-    A lazy or typo-prone human leaves ``<case>/<different>.py``. The link still
-    works, but the completion check looks for ``<case>/<case>.py`` and would
-    report the case pending forever. Rename it when there is exactly one
-    candidate, so the intent is obvious.
-
-    More than one recording in the folder is ambiguous — leave it and say so.
-    """
-    fixed: list[dict[str, Any]] = []
-    if not recordings_dir.is_dir():
-        return fixed
-
-    for case_dir in sorted(e for e in recordings_dir.iterdir() if e.is_dir()):
-        if cases is not None and case_dir.name not in cases:
-            continue
-        expected = case_dir / f"{case_dir.name}{RECORDING_SUFFIX}"
-        if expected.exists():
-            continue
-        candidates = [
-            entry for entry in sorted(case_dir.iterdir())
-            if entry.is_file() and entry.suffix == RECORDING_SUFFIX
-        ]
-        if len(candidates) != 1:
-            if candidates:
-                fixed.append({
-                    "case": case_dir.name,
-                    "ambiguous": [c.name for c in candidates],
-                })
-            continue
-        candidates[0].replace(expected)
-        fixed.append({
-            "case": case_dir.name,
-            "from": candidates[0].name,
-            "to": expected.name,
-        })
-    return fixed
-
-
-def case_folders(recordings_dir: Path) -> list[str]:
-    """Case names that have a folder in recordings_dir, sorted."""
-    if not recordings_dir.is_dir():
-        return []
-    return sorted(
-        entry.name for entry in recordings_dir.iterdir() if entry.is_dir()
-    )
-
-
-def link_system_auth(runs_root: Path, recordings_dir: Path) -> str:
-    """Ensure test-cases/auth.json points at the one real file in recordings/.
-
-    The real auth state lives at recordings/auth.json, where the human's
-    recording command leaves it. test-cases/auth.json is a convenience link for
-    anything that expects it there. Neither is committed — the gitignore
-    pattern for auth.json covers both, so no dangling link enters the repo.
-    """
-    link = runs_root / "auth.json"
-    expected = Path("..") / "recordings" / "auth.json"
-    normalised = Path(os.path.normpath(expected))
-
-    if link.is_symlink():
-        if Path(os.path.normpath(os.readlink(link))) == normalised:
-            return "already-linked"
-        link.unlink()
-    elif link.exists():
-        return "skipped"
-
-    if not (recordings_dir / "auth.json").exists():
-        return "no-auth-file"
-
-    link.symlink_to(expected)
-    return "created"
-
-
-def link_case(run_dir: Path, recordings_dir: Path, case: str) -> str:
-    """Point test-cases/<run>/<case> at recordings/<case>.
-
-    Returns what happened: "created", "already-linked", "repaired" or "skipped".
-    Never replaces a link with a copy, and never touches a real directory.
-    """
-    link = run_dir / case
-    target = Path("..") / ".." / "recordings" / case
-    expected = Path(os.path.normpath(target))
-
-    if link.is_symlink():
-        if Path(os.path.normpath(os.readlink(link))) == expected:
-            return "already-linked"
-        link.unlink()
-        link.symlink_to(target, target_is_directory=True)
-        return "repaired"
-
-    if link.exists():
-        # A real directory or file is sitting where the link belongs. Leave it.
-        return "skipped"
-
-    link.symlink_to(target, target_is_directory=True)
-    return "created"
-
-
-def link_cases(run_dir: Path, recordings_dir: Path, cases: list[str]) -> dict[str, str]:
-    """Link every named case into the run. Returns case -> what happened."""
-    return {case: link_case(run_dir, recordings_dir, case) for case in cases}
-
-
+# Where the one system-wide auth.json lives, relative to a case folder.
 AUTH_RELATIVE = "../auth.json"
 
 
-def point_recording_at_auth(recordings_dir: Path, case: str) -> str:
-    """Rewrite a recording's storage_state to the one system-wide auth.json.
-
-    There is one auth file per system, at recordings/auth.json — the lazy
-    human's codegen command puts it there. A case folder resolves to
-    recordings/<case>/, so from there the file is ../auth.json. codegen
-    writes a bare "auth.json", which resolves to nothing — fix it rather
-    than copy the secret into every folder.
-    """
-    recording = recordings_dir / case / f"{case}{RECORDING_SUFFIX}"
-    if not recording.is_file():
-        return "no-recording"
-
-    source = recording.read_text(encoding="utf-8")
-    # Match any storage_state value, not just a bare "auth.json", so the path
-    # converges no matter which form it was last written in.
-    pattern = r"""(storage_state=)(["'])[^"']*(["'])"""
-    if not re.search(pattern, source):
-        return "nothing-to-rewrite"
-
-    updated = re.sub(pattern, rf"\g<1>\g<2>{AUTH_RELATIVE}\g<3>", source)
-    if updated == source:
-        return "nothing-to-rewrite"
-    recording.write_text(updated, encoding="utf-8")
-    return "rewritten"
-
-
-def case_state(run_dir: Path, case: str) -> str:
-    """A case is complete when its recording resolves inside the run folder."""
-    return "complete" if (run_dir / case / f"{case}{RECORDING_SUFFIX}").exists() else "pending"
-
-
-def render_session(
-    run_dir: Path,
-    brief: Path | None,
-    cases: list[str],
-    recordings_dir: Path,
-) -> str:
-    """Build the session file: the brief's cases as a work list with state."""
-    states = {case: case_state(run_dir, case) for case in cases}
-    pending = [case for case in cases if states[case] == "pending"]
-
-    lines = [f"# Run {run_dir.name}", ""]
-    lines.append(f"Brief: {brief.name if brief else '—'}")
-    lines.append(f"Recordings: `{recordings_dir}`")
-    lines.append("")
-
-    if not cases:
-        lines.append("No cases found. Record one, or pass --cases.")
-        lines.append("")
-        return "\n".join(lines)
-
-    lines.append("## Cases")
-    lines.append("")
-    width = max(len(case) for case in cases)
-    for case in cases:
-        marker = "x" if states[case] == "complete" else " "
-        lines.append(f"- [{marker}] `{case}` — {states[case]}")
-    lines.append("")
-
-    lines.append("## Now")
-    lines.append("")
-    if pending:
-        lines.append(f"Working on: `{pending[0]}`")
-        url = run_dir / pending[0] / "url.txt"
-        if not url.exists():
-            lines.append("")
-            lines.append(
-                f"Blocked: `{url.relative_to(run_dir.parent)}` is missing — "
-                "the URL is unknown. Ask the developer, do not infer it."
-            )
-    else:
-        lines.append("Every case has a recording. The loop is done for this run.")
-    lines.append("")
-
-    return "\n".join(lines)
-
-
-def write_session(run_dir: Path, brief: Path | None, cases: list[str], recordings_dir: Path) -> Path:
-    """Rewrite session.md to the current state. Never appends."""
-    session = run_dir / SESSION_FILENAME
-    session.write_text(
-        render_session(run_dir, brief, cases, recordings_dir), encoding="utf-8"
-    )
-    return session
+# --------------------------------------------------------------------------
+# case list
+# --------------------------------------------------------------------------
 
 
 def read_cases(run_dir: Path) -> list[str] | None:
-    """Read cases.yml if it exists — the human may have corrected it.
+    """Read cases.yml if present — the human may have corrected it.
 
-    Returns None when there is no file yet. Never raises on a bad file: a
-    malformed cases.yml is a discrepancy to report, not a crash.
+    Returns None when absent or malformed. Never raises: a bad file is a
+    discrepancy to report, not a crash.
     """
     path = run_dir / CASES_FILENAME
     if not path.is_file():
@@ -285,8 +67,7 @@ def read_cases(run_dir: Path) -> list[str] | None:
 def write_cases(run_dir: Path, cases: list[str]) -> Path:
     """Record the interpreted case list so the human can correct it.
 
-    Written only when absent — an existing cases.yml is the human's and is
-    never overwritten.
+    Written only when absent — an existing cases.yml is the human's.
     """
     path = run_dir / CASES_FILENAME
     if path.exists():
@@ -303,45 +84,235 @@ def write_cases(run_dir: Path, cases: list[str]) -> Path:
     return path
 
 
-def cases_in_run(run_dir: Path, recordings_dir: Path) -> list[str]:
-    """Case names for a run's session file: whatever is linked plus what exists."""
-    linked = [entry.name for entry in sorted(run_dir.iterdir()) if entry.is_symlink()]
-    available = case_folders(recordings_dir)
-    return sorted(dict.fromkeys(linked + available))
+def case_folders(recordings_dir: Path) -> list[str]:
+    """Case names with a folder in recordings_dir, sorted."""
+    if not recordings_dir.is_dir():
+        return []
+    return sorted(e.name for e in recordings_dir.iterdir() if e.is_dir())
 
 
-def _resolve_commands(
-    missing: list[str], case: str, run_id: str, runs_root: Path
-) -> list[str]:
-    """Runnable commands for whatever the human still has to do.
+def discover_cases(recordings_dir: Path) -> list[str]:
+    """Every case on disk — folders, and recordings the human left flat.
 
-    Every discrepancy the AI stops on comes with the command that clears it.
-    Nothing is reported as blocked without a way to unblock it.
+    A lazy human records straight into recordings/, so a loose <case>.py is a
+    case waiting to be tidied and must be discovered too.
     """
-    commands: list[str] = []
-    if "url" in missing:
-        case_dir = runs_root.parent / "recordings" / case
-        commands.append(
-            f"echo '<work-url>' > {case_dir}/url.txt"
-        )
-    if "recording" in missing:
-        case_dir = runs_root.parent / "recordings" / case
-        commands.append(
-            f'uv run playwright codegen --load-storage={runs_root.parent}/recordings/auth.json '
-            f'-o {case_dir}/{case}.py "$(cat {case_dir}/url.txt)"'
-        )
-        commands.append(f"uv run python -m app.tidy {case} {run_id}")
-    return commands
+    if not recordings_dir.is_dir():
+        return []
+    names = set(case_folders(recordings_dir))
+    names |= {
+        e.stem for e in recordings_dir.iterdir()
+        if e.is_file() and e.suffix == RECORDING_SUFFIX
+    }
+    return sorted(names)
 
 
-def _what_is_missing(recordings_dir: Path, case: str, url: bool) -> list[str]:
-    """What a human still has to do for this case."""
-    missing: list[str] = []
-    if not (recordings_dir / case / f"{case}{RECORDING_SUFFIX}").exists():
-        missing.append("recording")
-    if not url:
-        missing.append("url")
-    return missing
+# --------------------------------------------------------------------------
+# the whole rule
+# --------------------------------------------------------------------------
+
+
+def classify(recordings_dir: Path, cases: list[str]) -> dict[str, list[str]]:
+    """Split the cases three ways: linkable, missing a .py, missing a URL."""
+    linked: list[str] = []
+    missing_py: list[str] = []
+    ask_url: list[str] = []
+    for case in cases:
+        case_dir = recordings_dir / case
+        # Any .py in the case folder counts as recorded — even a drifted
+        # filename, which normalise_recordings will then rename. Otherwise a
+        # typo would be reported as "no recording at all" instead of fixed.
+        any_py = case_dir.is_dir() and any(
+            e.suffix == RECORDING_SUFFIX for e in case_dir.iterdir() if e.is_file()
+        )
+        if any_py or (recordings_dir / f"{case}{RECORDING_SUFFIX}").exists():
+            linked.append(case)
+            if not (case_dir / "url.txt").exists():
+                ask_url.append(case)
+        else:
+            missing_py.append(case)
+    return {"linked": linked, "missing_py": missing_py, "ask_url": ask_url}
+
+
+def url_request(recordings_dir: Path, case: str) -> str:
+    """The line to hand over when a case needs its URL."""
+    return f"echo '<url>' > {recordings_dir}/{case}/url.txt"
+
+
+# --------------------------------------------------------------------------
+# tidying
+# --------------------------------------------------------------------------
+
+
+def tidy_recordings(recordings_dir: Path, cases: list[str] | None = None) -> list[str]:
+    """Give every loose ``<case>.py`` its own case folder.
+
+    Only picks up recordings sitting flat in recordings_dir; one already in a
+    case folder is left alone.
+    """
+    moved: list[str] = []
+    if not recordings_dir.is_dir():
+        return moved
+    for entry in sorted(recordings_dir.iterdir()):
+        if not entry.is_file() or entry.suffix != RECORDING_SUFFIX:
+            continue
+        case = entry.stem
+        if cases is not None and case not in cases:
+            continue
+        case_dir = recordings_dir / case
+        case_dir.mkdir(exist_ok=True)
+        entry.replace(case_dir / entry.name)
+        moved.append(case)
+    return moved
+
+
+def normalise_recordings(recordings_dir: Path, cases: list[str] | None = None) -> list[str]:
+    """Make each case folder's recording match its folder name.
+
+    ``effort-hours/effort-hour.py`` links fine but the completion check looks
+    for ``effort-hours/effort-hours.py``. Rename it when there is exactly one
+    candidate; two recordings are ambiguous, so leave them and report.
+    """
+    fixed: list[str] = []
+    if not recordings_dir.is_dir():
+        return fixed
+    for case_dir in sorted(e for e in recordings_dir.iterdir() if e.is_dir()):
+        if cases is not None and case_dir.name not in cases:
+            continue
+        expected = case_dir / f"{case_dir.name}{RECORDING_SUFFIX}"
+        if expected.exists():
+            continue
+        candidates = [
+            e for e in sorted(case_dir.iterdir())
+            if e.is_file() and e.suffix == RECORDING_SUFFIX
+        ]
+        if len(candidates) == 1:
+            candidates[0].replace(expected)
+            fixed.append(case_dir.name)
+        elif candidates:
+            fixed.append(f"{case_dir.name} (ambiguous: {', '.join(c.name for c in candidates)})")
+    return fixed
+
+
+def point_recording_at_auth(recordings_dir: Path, case: str) -> str:
+    """Rewrite a recording's storage_state to the one system-wide auth.json.
+
+    The real file is recordings/auth.json. A case folder resolves to
+    recordings/<case>/, so from there it is ../auth.json. codegen writes a bare
+    "auth.json", which resolves to nothing.
+    """
+    recording = recordings_dir / case / f"{case}{RECORDING_SUFFIX}"
+    if not recording.is_file():
+        return "no-recording"
+    source = recording.read_text(encoding="utf-8")
+    pattern = r"""(storage_state=)(["'])[^"']*(["'])"""
+    if not re.search(pattern, source):
+        return "nothing-to-rewrite"
+    updated = re.sub(pattern, rf"\g<1>\g<2>{AUTH_RELATIVE}\g<3>", source)
+    if updated == source:
+        return "nothing-to-rewrite"
+    recording.write_text(updated, encoding="utf-8")
+    return "rewritten"
+
+
+# --------------------------------------------------------------------------
+# linking
+# --------------------------------------------------------------------------
+
+
+def link_case(run_dir: Path, recordings_dir: Path, case: str) -> str:
+    """Point test-cases/<run>/<case> at recordings/<case>.
+
+    Never replaces a link with a copy, and never touches a real directory.
+    """
+    link = run_dir / case
+    target = Path("..") / ".." / "recordings" / case
+    expected = Path(os.path.normpath(target))
+
+    if link.is_symlink():
+        if Path(os.path.normpath(os.readlink(link))) == expected:
+            return "already-linked"
+        link.unlink()
+        link.symlink_to(target, target_is_directory=True)
+        return "repaired"
+    if link.exists():
+        return "skipped"
+    link.symlink_to(target, target_is_directory=True)
+    return "created"
+
+
+def link_cases(run_dir: Path, recordings_dir: Path, cases: list[str]) -> dict[str, str]:
+    return {case: link_case(run_dir, recordings_dir, case) for case in cases}
+
+
+def link_system_auth(runs_root: Path, recordings_dir: Path) -> str:
+    """Ensure test-cases/auth.json points at the one real file in recordings/."""
+    link = runs_root / "auth.json"
+    expected = Path("..") / "recordings" / "auth.json"
+    normalised = Path(os.path.normpath(expected))
+    if link.is_symlink():
+        if Path(os.path.normpath(os.readlink(link))) == normalised:
+            return "already-linked"
+        link.unlink()
+    elif link.exists():
+        return "skipped"
+    if not (recordings_dir / "auth.json").exists():
+        return "no-auth-file"
+    link.symlink_to(expected)
+    return "created"
+
+
+# --------------------------------------------------------------------------
+# session
+# --------------------------------------------------------------------------
+
+
+def case_state(run_dir: Path, case: str) -> str:
+    """A case is complete when its recording resolves inside the run folder."""
+    return "complete" if (run_dir / case / f"{case}{RECORDING_SUFFIX}").exists() else "pending"
+
+
+def render_session(
+    run_dir: Path, brief: Path | None, cases: list[str], recordings_dir: Path
+) -> str:
+    """The session file: the cases as a work list with state. Rewritten, never appended."""
+    states = {case: case_state(run_dir, case) for case in cases}
+    lines = [
+        f"# Run {run_dir.name}",
+        "",
+        f"Brief: {brief.name if brief else '—'}",
+        f"Recordings: `{recordings_dir}`",
+        "",
+        "## Cases",
+        "",
+    ]
+    if not cases:
+        lines.append("No cases yet.")
+    for case in cases:
+        marker = "x" if states[case] == "complete" else " "
+        lines.append(f"- [{marker}] `{case}` — {states[case]}")
+    lines += ["", "## Now", ""]
+    pending = [c for c in cases if states[c] == "pending"]
+    if pending:
+        lines.append(f"Working on: `{pending[0]}`")
+    else:
+        lines.append("Every case has a recording.")
+    lines.append(f"Updated: {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_session(
+    run_dir: Path, brief: Path | None, cases: list[str], recordings_dir: Path
+) -> Path:
+    session = run_dir / SESSION_FILENAME
+    session.write_text(render_session(run_dir, brief, cases, recordings_dir), encoding="utf-8")
+    return session
+
+
+# --------------------------------------------------------------------------
+# entry points
+# --------------------------------------------------------------------------
 
 
 def tidy_one_case(
@@ -351,64 +322,41 @@ def tidy_one_case(
     recordings_dir: Path = DEFAULT_RECORDINGS_DIR,
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Bring one case into one run, doing whatever that case still needs.
-
-        uv run python -m app.tidy sales-invoice 001
-
-    In order: give a loose recording its folder, fix a name that drifted,
-    point the recording at the single auth file, symlink the case into the
-    run, and rewrite session.md for the run.
-    """
+    """Bring one case into one run. Touches nothing else."""
     run_dir = runs_root / run_id
     if not run_dir.is_dir():
         return {"action": "no-such-run", "run_id": run_id, "case": case}
 
-    briefs = find_brief(run_dir)
-    brief = briefs[0] if briefs else None
-    names = [case]
-
+    before = classify(recordings_dir, [case])
     if dry_run:
-        loose = recordings_dir / f"{case}.py"
-        would_tidy = loose.is_file()
         return {
             "action": "would-prepare",
             "dry_run": True,
             "case": case,
             "run_id": run_id,
-            "would_move": str(loose) if would_tidy else None,
-            "would_move_to": str(recordings_dir / case / f"{case}.py") if would_tidy else None,
-            "session": str(run_dir / SESSION_FILENAME),
+            "would_link": before["linked"] == [case],
+            "missing_py": before["missing_py"],
         }
 
-    tidied = tidy_recordings(recordings_dir, names)
-    renamed = normalise_recordings(recordings_dir, names)
-    auth_fixed = point_recording_at_auth(recordings_dir, case)
-    linked = link_case(run_dir, recordings_dir, case)
-    system_auth = link_system_auth(runs_root, recordings_dir)
+    if case in before["linked"]:
+        tidy_recordings(recordings_dir, [case])
+        normalise_recordings(recordings_dir, [case])
+        point_recording_at_auth(recordings_dir, case)
+        linked = link_case(run_dir, recordings_dir, case)
+    else:
+        linked = "skipped"
+    link_system_auth(runs_root, recordings_dir)
+    write_session(run_dir, (find_brief(run_dir) or [None])[0], [case], recordings_dir)
 
-    all_cases = cases_in_run(run_dir, recordings_dir)
-    write_session(run_dir, brief, all_cases, recordings_dir)
-
-    state = case_state(run_dir, case)
-    has_url = (recordings_dir / case / "url.txt").exists()
-    missing = _what_is_missing(recordings_dir, case, has_url)
+    after = classify(recordings_dir, [case])
     return {
         "action": "prepared",
-        "dry_run": False,
         "case": case,
         "run_id": run_id,
-        "brief": brief.name if brief else None,
-        "tidied": tidied,
-        "renamed": renamed,
-        "auth_fixed": auth_fixed,
         "linked": linked,
-        "system_auth": system_auth,
-        "state": state,
-        # The stop signal for the loop. Anything not empty is a human step, and
-        # `commands` carries exactly how to resolve each one.
-        "needs": missing,
-        "commands": _resolve_commands(missing, case, run_id, runs_root),
-        "session": str(run_dir / SESSION_FILENAME),
+        "missing_py": after["missing_py"],
+        "ask_url_for": after["ask_url"],
+        "commands": [url_request(recordings_dir, c) for c in after["ask_url"]],
     }
 
 
@@ -419,9 +367,7 @@ def prepare(
     cases: list[str] | None = None,
     dry_run: bool = False,
 ) -> dict[str, Any]:
-    """Tidy, link, report. Returns what happened."""
-    from .planner import find_brief, find_latest_run
-
+    """Every case into one run. Link what exists; complain only about a missing .py."""
     if run_id is not None:
         run_dir = runs_root / run_id
         if not run_dir.is_dir():
@@ -431,62 +377,49 @@ def prepare(
         if run_dir is None:
             return {"action": "no-run", "root": str(runs_root)}
 
-    briefs = find_brief(run_dir)
-    brief = briefs[0] if briefs else None
-
-    tidied = [] if dry_run else tidy_recordings(recordings_dir)
-    renamed = [] if dry_run else normalise_recordings(recordings_dir)
-    if dry_run:
-        tidied = [
-            {"case": e.stem, "from": str(e), "to": str(recordings_dir / e.stem / e.name)}
-            for e in sorted(recordings_dir.glob(f"*{RECORDING_SUFFIX}"))
-            if e.is_file()
-        ]
+    brief = (find_brief(run_dir) or [None])[0]
 
     declared = read_cases(run_dir)
     if declared is not None:
-        # The human's list wins over anything inferred. Never a reason to stop.
-        names = declared
+        names = declared          # the human's list wins, and is never a reason to stop
     elif cases is not None:
         names = cases
     else:
-        names = case_folders(recordings_dir)
-        if names:
+        names = discover_cases(recordings_dir)
+        if names and not dry_run:
             write_cases(run_dir, names)
-    auth_fixed = (
-        {}
-        if dry_run
-        else {case: point_recording_at_auth(recordings_dir, case) for case in names}
-    )
-    links = {} if dry_run else link_cases(run_dir, recordings_dir, names)
-    system_auth = "skipped" if dry_run else link_system_auth(runs_root, recordings_dir)
-    session = run_dir / SESSION_FILENAME
+
+    before = classify(recordings_dir, names)
+
     if not dry_run:
+        tidy_recordings(recordings_dir, before["linked"])
+        normalise_recordings(recordings_dir, before["linked"])
+        for case in before["linked"]:
+            point_recording_at_auth(recordings_dir, case)
+        link_cases(run_dir, recordings_dir, before["linked"])
+        link_system_auth(runs_root, recordings_dir)
         write_session(run_dir, brief, names, recordings_dir)
 
-    states = {case: case_state(run_dir, case) for case in names}
+    after = classify(recordings_dir, names)
     return {
         "action": "prepared",
         "dry_run": dry_run,
         "run_id": run_dir.name,
         "brief": brief.name if brief else None,
-        "tidied": tidied,
-        "renamed": renamed,
-        "auth_fixed": auth_fixed,
-        "linked": links,
-        "system_auth": system_auth,
-        "states": states,
-        "pending": [case for case in names if states[case] == "pending"],
-        "session": str(session),
+        "linked": len(after["linked"]),           # silent — not worth case-by-case
+        "missing_py": after["missing_py"],       # the only thing worth complaining about
+        "ask_url_for": after["ask_url"],         # what to ask the human for next
+        "commands": [url_request(recordings_dir, c) for c in after["ask_url"]],
+        "session": str(run_dir / SESSION_FILENAME),
     }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Tidy recordings, link them into a run, report state.",
+        description="Link recordings into a run and report what needs a human.",
         epilog=(
-            "tidy.py <case> <run_id>   prepare one case into one run\n"
-            "tidy.py                    prepare every case into the latest run"
+            "tidy.py <case> <run_id>   one case into one run\n"
+            "tidy.py                    every case into the latest run"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -496,11 +429,9 @@ def main() -> None:
     parser.add_argument(
         "--recordings", dest="recordings_dir", default=str(DEFAULT_RECORDINGS_DIR)
     )
-    parser.add_argument("--run-id", dest="run_id_opt", help="target a run (batch mode)")
-    parser.add_argument("--cases", help="comma-separated case names, overrides discovery")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="report what would change, change nothing"
-    )
+    parser.add_argument("--run-id", dest="run_id_opt")
+    parser.add_argument("--cases", help="comma-separated names, overrides discovery")
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     runs_root = Path(args.runs_root)
@@ -515,9 +446,7 @@ def main() -> None:
             dry_run=args.dry_run,
         )
     else:
-        names = (
-            [n.strip() for n in args.cases.split(",") if n.strip()] if args.cases else None
-        )
+        names = [n.strip() for n in args.cases.split(",") if n.strip()] if args.cases else None
         report = prepare(
             runs_root=runs_root,
             recordings_dir=recordings_dir,
