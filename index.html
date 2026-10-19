@@ -80,8 +80,8 @@ shared between runs. Run <code>002</code> carries its own copies; when the produ
 run re-records against the current DOM rather than inheriting selectors that may no longer
 resolve. History is carried by the run's evidence, not by a shared document.</p>
 <p><strong>The brief says what to test. The recording is how.</strong> The brief carries the
-workflow; each <code>&lt;case&gt;.py</code> carries the exact interactions and assertions for
-that case. Neither restates the other.</p>
+workflow; each <code>&lt;case&gt;.py</code> carries the exact interactions for that case.
+Neither restates the other.</p>
 
 <h2>4. Intended workflow</h2>
 <p>The developer provides a testing workflow. The loop records a new test, or replays a
@@ -139,7 +139,7 @@ recorded one, and repeats until every test passes.</p>
             <td><strong>Step D</strong></td>
             <td>Inform the developer</td>
             <td>Runner + terminal summary</td>
-            <td>Failed assertion reported by case, step, and message</td>
+            <td>Failed recording reported by case and message</td>
             <td>Remote event stream + terminal summary</td>
         </tr>
     </tbody>
@@ -226,43 +226,44 @@ Chromium browser (<code>HEADLESS = False</code>, §1):</p>
 
 <fieldset>
     <legend><strong>Step D — Inform the Developer, and the Loop Repeats</strong></legend>
-    <p>A bug surfaces in exactly one of two ways, and the two are different because the two
-kinds of run are different:</p>
+    <p>A bug surfaces in one of two ways, and the two are different because the two kinds of
+run are different:</p>
     <ul>
         <li><strong>During recording (Step B)</strong> — the human decides. They are watching
             and they halt. No automation is involved.</li>
-        <li><strong>During replay (Step C)</strong> — a recorded <code>expect()</code>
-            assertion failed, or the recording threw. That is the bug.</li>
+        <li><strong>During replay (Step C)</strong> — the recording threw. That is the bug.</li>
     </ul>
     <p>Either way the developer is informed: the event stream carries it, and the terminal
-prints a summary naming the case, the step, and the assertion that failed.</p>
-    <p class="note"><strong>A recording with no assertions can only detect crashes.</strong> It
-    proves "the flow still runs", never "the numbers are right". Any case with a right answer
-    — tax totals, posted status, printed output — must carry an <code>expect()</code> for that
-    answer, or it cannot fail on a wrong value.</p>
+prints a summary naming the case and what failed.</p>
+    <p class="note">Replay detects a broken flow. It does not judge whether a number is right —
+    that judgement is the human's, made by watching.</p>
     <p>The developer fixes the product and re-runs. The loop breaks when every test passes.</p>
 </fieldset>
 
 <h2>5. Recording contract</h2>
+<p>Each case is its own folder, holding the real URL, the recording, and the evidence:</p>
+<pre>test-cases/&lt;run&gt;/&lt;case&gt;/
+├── url.txt          # the real URL — never guessed
+├── &lt;case&gt;.py        # the recording
+└── screenshot.png   # evidence — this name never changes</pre>
 <p>A recording is ordinary Playwright code. It is executed, not interpreted — the runner
-imports nothing from it and rewrites nothing in it. What a recording contains is what a
-recorded test does.</p>
+imports nothing from it. What a recording contains is what a recorded test does.</p>
 <ul>
-    <li><strong>Navigation:</strong> <code>page.goto()</code> to the recorded route.</li>
+    <li><strong>Navigation:</strong> <code>page.goto()</code> to the URL in <code>url.txt</code>.</li>
     <li><strong>Input:</strong> <code>get_by_placeholder()</code>, <code>get_by_label()</code>,
         <code>get_by_role()</code> — whatever the DOM actually offered at record time.</li>
     <li><strong>Interaction:</strong> <code>click()</code>, <code>press()</code>,
         <code>select_option()</code> on buttons, tabs, and action controls.</li>
-    <li><strong>Assertion:</strong> <code>expect()</code> for anything with a right answer.</li>
-    <li><strong>Evidence:</strong> <code>screenshot()</code> for the final or failing state.</li>
 </ul>
 <p><strong>Invariants.</strong></p>
 <ul>
     <li><strong>No selector is ever written by the AI.</strong> Every locator in a recording
         came from a human clicking the real DOM.</li>
-    <li><strong>Every case with a right answer carries an assertion.</strong> A recording of
-        clicks and fills alone cannot fail on a wrong value — it can only fail by crashing.
-        Tax totals, posted status, and printed output each need an <code>expect()</code>.</li>
+    <li><strong>The URL is never guessed.</strong> It is read from <code>url.txt</code>. A missing
+        <code>url.txt</code> means the URL is unknown and the step cannot proceed.</li>
+    <li><strong>The screenshot line is appended by the AI</strong>, immediately before the form
+        submit, as <code>page.screenshot(path="screenshot.png")</code> — a bare filename so it
+        resolves into the case's own folder. The human never takes it by hand.</li>
     <li><strong>Login is never in a recording.</strong> It is loaded from
         <code>auth.json</code>.</li>
 </ul>
@@ -275,19 +276,22 @@ prompts, and nothing waits for a keystroke.</p>
         <code>test-cases/</code>.</li>
     <li><strong>Discover the <code>.md</code> file from Murugesan inside it.</strong>
         The name is irrelevant; only its presence counts. Without it, the loop does not proceed.</li>
-    <li>Collect every <code>*.py</code> recording in the run folder. Each one is a test that
+    <li>Find every <code>&lt;case&gt;/</code> subfolder in the run folder. Each one is a test that
         already exists.</li>
     <li>Open Chromium <strong>visible, never headless</strong> (§1).</li>
     <li>Load <code>auth.json</code> so every recording starts signed in.</li>
-    <li>Execute each recording in turn, exactly as written. No interpretation, no
-        substitution of values, no synthesis.</li>
+    <li>Run each <code>&lt;case&gt;.py</code> in turn, exactly as written, one at a time — the
+        tenant is shared state, so never in parallel. No interpretation, no substitution of
+        values, no synthesis.</li>
     <li>Hold <code>STEP_DELAY</code> (3 seconds) between operations so human eyes can follow
         what was just entered before the next action fires.</li>
     <li>POST every operation as an event to <code>events_url</code> over HTTP Basic Auth.
         Nothing is written to a local log.</li>
-    <li>A failed assertion or an uncaught throw stops that recording, is reported by case,
-        step, and message, and ends the run.</li>
-    <li>When every recording passes, the browser closes, the terminal returns, and the loop
+    <li><code>screenshot.png</code> is written into that case's own folder, so two cases never
+        overwrite each other's evidence.</li>
+    <li>An uncaught throw stops that recording, is reported by case and message, and ends
+        the run.</li>
+    <li>When every recording completes, the browser closes, the terminal returns, and the loop
         breaks.</li>
 </ol>
 
@@ -298,12 +302,13 @@ prompts, and nothing waits for a keystroke.</p>
     <ul>
         <li><mark>briefed</mark>: The workflow names the test. No code exists yet.</li>
         <li><mark>recorded</mark>: A human drives it manually with <code>codegen</code>
-            recording on, writing <code>&lt;case&gt;.py</code> into the run folder. The test now
-            exists and can be replayed.</li>
+            recording on, writing <code>&lt;case&gt;.py</code> into the case folder. The AI then
+            appends the screenshot line before the form submit. The test now exists and can be
+            replayed.</li>
         <li><mark>running</mark>: Executed visibly by Playwright from the recording.</li>
-        <li><mark>passed</mark>: Every recorded assertion held.</li>
-        <li><mark>failed</mark>: An assertion failed, or the recording threw. The developer is
-            informed and fixes the product.</li>
+        <li><mark>passed</mark>: The recording ran to completion and the human saw nothing wrong.</li>
+        <li><mark>failed</mark>: The recording threw, or the human saw wrong behaviour. The
+            developer is informed and fixes the product.</li>
     </ul>
 </details>
 
@@ -315,10 +320,11 @@ prompts, and nothing waits for a keystroke.</p>
             folder. Without it the loop does not proceed.</li>
         <li><code>recording</code>: Tests not yet recorded are driven manually, with
             <code>codegen</code> on, halting when a bug is found.</li>
-        <li><code>replay</code>: Recorded tests are played back unattended in visible Chromium.</li>
-        <li><code>failed</code>: A recording stopped on a failed assertion or a throw. The
-            developer is informed.</li>
-        <li><code>passed</code>: Every recording in the run passed. The loop breaks.</li>
+        <li><code>replay</code>: Recorded tests are played back unattended in visible Chromium,
+            one at a time.</li>
+        <li><code>failed</code>: A recording stopped on a throw. The developer is informed.</li>
+        <li><code>passed</code>: Every recording in the run completed and the human saw nothing
+            wrong. The loop breaks.</li>
     </ul>
     <p>A failed run is not resumed. The developer fixes the product and re-runs; the next
     attempt is a fresh <code>run_id</code> (<code>002</code>, <code>003</code>, …) with its
@@ -359,7 +365,7 @@ so Murugan and Jashveer see real-time progress.</p>
     <li>The runner may open and inspect the tenant but must not create or post a voucher
         unless a human approved that specific case and its test data.</li>
     <li>A human owns the final PASS/FAIL — an AI model never marks a run as passed.</li>
-    <li>No AI writes selectors or assertions. Recordings are produced by a human driving the live
+    <li>No AI writes selectors. Recordings are produced by a human driving the live
         DOM; the runner only executes them. The human writes the brief and decides PASS/FAIL.</li>
 </ul>
 
@@ -371,15 +377,17 @@ so Murugan and Jashveer see real-time progress.</p>
         synthesises selectors at runtime, <code>app/vouchers/&lt;case&gt;/test-case.html</code>
         still holds hand-written method prose, and <code>app/diagnose.py</code> inspects a plan.
         Replaying recorded <code>*.py</code> files instead is the outstanding work.</li>
-    <li><strong>No recordings exist yet.</strong> Every case named in the brief needs a human to
-        drive it once with <code>codegen</code> recording, including an <code>expect()</code> for
-        anything with a right answer.</li>
-    <li><strong>Assertions are the only automated bug detector on replay.</strong> Until each case
-        carries one, a replay proves the flow still runs and nothing more — a wrong tax total
-        passes silently.</li>
-    <li><strong>Live tenant routes.</strong> The vouchers are
-        confirmed against the live tenant (2026-10-17) and open by route rather
-        than by hunting for a control: Sales Invoice &rarr; <code>/accounting/sales-invoices/new/</code>,
+    <li><strong>No recordings exist yet for run <code>002</code>.</strong> Every case named in
+        the brief needs a human to drive it once with <code>codegen</code> recording, then the AI
+        appends the screenshot line before the form submit.</li>
+    <li><strong>URLs are unknown until a human supplies them.</strong> Each case folder needs a
+        <code>url.txt</code>. Nothing infers a route, so a case with no <code>url.txt</code>
+        cannot be recorded or replayed.</li>
+    <li><strong>Replay detects broken flows, not wrong values.</strong> A recording that runs to
+        completion proves the flow still works. Whether the numbers are right is judged by the
+        human watching the screen.</li>
+    <li><strong>Live tenant routes, from run <code>001</code>.</strong> Confirmed against the
+        live tenant on 2026-10-17: Sales Invoice &rarr; <code>/accounting/sales-invoices/new/</code>,
         Purchase Bill &rarr; <code>/accounting/bills/new/</code>, GRN &rarr;
         <code>/accounting/grns/new/</code> (the tenant's own heading reads
         <em>Goods Receipt</em>), Credit Note &rarr; <code>/accounting/credit-notes/new/</code>,

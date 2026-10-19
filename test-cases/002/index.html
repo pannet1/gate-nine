@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Run 002 — Work Platform test workflow</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px auto; max-width: 1000px; line-height: 1.5; color: #222; }
+        h1 { color: #333; border-bottom: 2px solid #333; padding-bottom: 6px; }
+        h2 { color: #333; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 34px; }
+        h3 { color: #444; margin-top: 24px; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+        th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; vertical-align: top; }
+        th { background: #f2f2f2; }
+        code, pre { background: #f5f5f5; font-family: Consolas, monospace; }
+        pre { padding: 10px; overflow-x: auto; border: 1px solid #ddd; }
+        ul, ol { line-height: 1.7; }
+        .note { background: #fffbe6; border: 1px solid #e6d98a; padding: 10px; }
+        .stop { background: #fdeaea; border: 1px solid #e0a0a0; padding: 10px; }
+        .known { background: #eef4fb; border: 1px solid #a8c4e0; padding: 10px; }
+        .src { color: #666; font-size: 0.85em; }
+        .legend span { margin-right: 14px; white-space: nowrap; }
+    </style>
+</head>
+<body>
+
+<h1>Run 002 — Work Platform test workflow</h1>
+<p class="src">Generated from <code>test-cases/002/Work Platform — Test Manual.md</code> ·
+Oct 16, 2026 · @Iyyasamy Murugesan</p>
+
+<p>This is the <strong>workflow helper</strong> for run <code>002</code> — a distilled,
+ordered view of the brief. Every item traces back to the brief; nothing has been invented.
+If something here contradicts the brief, the brief wins — report the discrepancy.</p>
+
+<h2>Status legend</h2>
+<p class="legend">
+    <span><strong>▣</strong> Gate-9 verified — safe to test, expect it to work</span><br>
+    <span><strong>◐</strong> Partial — test it, expect rough edges</span><br>
+    <span><strong>▢</strong> Not built — nothing to test, do not file a bug</span>
+</p>
+
+<h2>Before you start</h2>
+<div class="stop">
+    <p><strong>Which tenant.</strong> Use <strong>Fortune Electronics</strong>, or another
+    tenant already confirmed to have the Work module enabled. Do <strong>not</strong> use the
+    Zigma Infosoft demo tenant — Task/Helpdesk is scheduled <em>last</em> in that rollout and
+    may have no Work entitlement or seed data.</p>
+</div>
+<ul>
+    <li><strong>Two accounts.</strong> One broad role (<code>owner</code>, or any role holding
+        <code>work:sla_policy:read</code>) to reach admin and reporting surfaces; one narrow
+        operational role (technician/agent) to confirm admin screens are correctly hidden.</li>
+    <li><strong>Cookies are automatic.</strong> Rachis uses HttpOnly cookies
+        (<code>at</code>, <code>rt</code>, <code>csrf</code>). Logging in through the browser sets
+        all three — you only handle cookies yourself if you hit the API directly with curl.</li>
+</ul>
+
+<h2>Do NOT test — not built</h2>
+<div class="stop">
+<p>These are confirmed absent. Time spent here is wasted, and filing them as bugs costs
+credibility.</p>
+<ul>
+    <li>Mobile app (<code>rachis-works</code>) — not started. Push-notification delivery and
+        device-bound approvals cannot be tested.</li>
+    <li>Clone / duplicate, recurring tasks (RRULE), templates, automations engine.</li>
+    <li>Calendar view — stub only.</li>
+    <li>Work Types / Field Registry / Workflow editor / Automations <em>admin screens</em> —
+        API-only today, no settings UI.</li>
+    <li><strong>SLA badge or indicator on the item itself</strong> — use the Dashboard
+        At-risk panel or the KPI reports.</li>
+    <li>@mentions and reactions on comments.</li>
+    <li>One-click quick-create shortcut — the full-create form works.</li>
+    <li><code>category</code> / <code>tags</code> fields on work items.</li>
+    <li>Programmatic work-item creation from other modules (Invoice, GRN, Bundle) — these still
+        create legacy records, not real work items. Expected to look broken; it is tracked.</li>
+    <li>Legacy endpoints <code>/api/v1/tasks</code> and <code>/api/v1/service/tickets</code> —
+        old engines kept for compatibility. They show stale/empty data. <strong>Always test
+        through the Work module pages.</strong></li>
+</ul>
+</div>
+
+<h2>Known bugs — reproduce, do not re-file</h2>
+<div class="known">
+<ul>
+    <li><strong>People panel goes stale after an approval decision.</strong> The requester briefly
+        shows 0 people right after submitting; a rejecting approver can stay listed after
+        rejection, until the page is reloaded. Recorded, unfixed. Reproduce it and confirm
+        whether it is still present — do not file it as new.</li>
+    <li><strong>Already fixed and re-walked 2026-10-11</strong> (Fortune, Service → Dispatch):
+        Esc closing the drawer, truncated Schedule/Assign buttons, technician field not a
+        searchable picker, schedule footer hint disappearing on scroll, Requests tab needing a
+        manual reload. All five are fixed — if you see any of them, that is a regression worth
+        reporting.</li>
+</ul>
+</div>
+
+<h2>If something is missing, check this first</h2>
+<p>Almost never a missing feature. In order of likelihood:</p>
+<ol>
+    <li><strong>Your role lacks the permission key.</strong> See the permission table below.</li>
+    <li><strong>The tenant is not on the latest schema.</strong></li>
+    <li><strong>Stale manifest cache (~60s).</strong> Wait a minute and retry.</li>
+</ol>
+
+<h2>1. Task Management</h2>
+<h3>Core fields</h3>
+<ul>
+    <li>◐ <strong>Title, description, priority, status, type</strong> — core fields work.
+        Confirm on create and after reload.</li>
+    <li>▣ <strong>Estimated / actual effort hours</strong> (2026-10-15) — enter on create,
+        <strong>confirm it persists after reload</strong>.</li>
+    <li>◐ <strong>Quick-create + full-create page</strong> — full create works; there is no
+        one-click quick create.</li>
+</ul>
+<h3>Item structure</h3>
+<ul>
+    <li>▣ <strong>Subtasks (parent → child)</strong> (2026-10-05) — Subtasks tab on the detail page.</li>
+    <li>▣ <strong>Checklist items</strong> (2026-10-15) — add and check items in the Checklist panel.</li>
+    <li>▣ <strong>Source-entity link</strong> (2026-10-05) — shows on Create/Edit when relevant.</li>
+    <li>▣ <strong>Activity feed</strong> (2026-10-05) — History tab on the detail page.</li>
+    <li>◐ <strong>Threaded comments</strong> — Conversation tab works. @mentions and reactions are
+        not built (see above).</li>
+</ul>
+<h3>People &amp; flow</h3>
+<ul>
+    <li>◐ <strong>Participants</strong> — owner, assignee, reviewer, approver, watcher. Visible on
+        the People panel. "team" is a participant kind, not a team concept. Approver is
+        ▣ verified 2026-07-14.</li>
+    <li>▣ <strong>Tenant-configurable status set</strong> (2026-07-13, backend + board) — states
+        are pre-seeded; there is no settings screen to edit them yet.</li>
+    <li>▣ <strong>Dependencies (blocking / blocked-by)</strong> (2026-10-05) — a blocked item
+        cannot be approved or closed until its blocker clears. <strong>Try this directly.</strong></li>
+    <li>▣ <strong>N-step approval chain</strong> (2026-10-04) — see section 4.</li>
+</ul>
+<h3>Views, files, notifications</h3>
+<ul>
+    <li>▣ <strong>List view + Board (kanban)</strong> (2026-07-13) — drag-and-drop on the board;
+        list has sort/filter/search.</li>
+    <li>▣ <strong>Attachments</strong> (2026-10-06) — upload, preview, download. Includes soft
+        delete, scan status field, per-role permissions.</li>
+    <li>◐ <strong>Notifications</strong> — assigned, mentioned, SLA breach/escalation, approval,
+        due/overdue. Header bell; several sub-items ▣ 2026-10-15. Mobile push is blocked.</li>
+    <li>◐ <strong>SLA clocks</strong> — clocks run, but there is no badge on the item. Test via
+        Reports (section 5).</li>
+    <li>◐ <strong>RBAC + audit trail + RLS</strong> — approve and delete permission keys exist.
+        <strong>Delete via UI is not fully confirmed</strong> — flag it if the delete button is
+        missing or misbehaves.</li>
+</ul>
+
+<h2>2. Service Helpdesk</h2>
+<ul>
+    <li>▣ <strong>Email intake + intake channel admin</strong> (2026-08-14) — Settings → Service
+        Desk → Intake Channels.</li>
+    <li>▣ <strong>Business-hours calendars</strong> (2026-09-29) — Settings → Service Desk → Calendars.</li>
+    <li>▣ <strong>SLA engine</strong> (2026-08-14) — see section 3.</li>
+    <li>◐ <strong>Contracts + SLA binding</strong> — API-complete; no staff UI to create or edit
+        a contract (curl/admin-only).</li>
+    <li>▣ <strong>Customer portal</strong> (2026-08-19, 2026-09-29) — test as a customer at
+        <code>/portal/</code>: request a link, sign in, view and reply to tickets, search the KB,
+        answer a satisfaction survey.</li>
+    <li>▣ <strong>Knowledge base — staff authoring</strong> (2026-09-29) — Settings → Service Desk →
+        Knowledge Base: create, draft, publish, revise, archive.</li>
+    <li>◐ <strong>Knowledge base — portal search</strong> — works at API/portal level; no recorded
+        founder walk for search specifically.</li>
+    <li>◐ <strong>CMDB: customer assets / config items</strong> — detail pages exist, no founder
+        walk yet.</li>
+    <li>▣ <strong>Dispatch board + technicians</strong> (2026-09-29) — Service → Dispatch;
+        Settings → Zones &amp; Skills. Technician picker is a searchable autocomplete.</li>
+    <li>▣ <strong>Scheduling</strong> (2026-09-29) — appointments, conflicts, portal booking.
+        Service → Dispatch → Schedule tab.</li>
+    <li>▣ <strong>CSAT satisfaction (staff view)</strong> (2026-09-29) — Settings → Service Desk →
+        Satisfaction.</li>
+    <li>▣ <strong>Per-user notification preferences</strong> (2026-09-29) — Settings → Profile &amp;
+        preferences → My notifications.</li>
+    <li>◐ <strong>Merge / split tickets</strong> — UI works via drawer footer actions. Merged and
+        void items are hidden behind a <em>Show merged/void</em> toggle.</li>
+    <li>◐ <strong>Workflow seed at provisioning</strong> — new tenants get a default workflow
+        automatically; not every provisioning path has been walked.</li>
+</ul>
+
+<h2>3. SLA engine</h2>
+<p>▣ Core engine verified 2026-08-14, sitting on business-hours calendars and contract→SLA binding.</p>
+<ul>
+    <li><strong>Policy versions.</strong> Policies are versioned; publishing a new version archives
+        the old one. Only a draft is editable — published and archived versions are read-only.
+        <strong>Create a new version and confirm the old one locks.</strong></li>
+    <li><strong>Escalation ladder.</strong> Steps with time-based targets (assignee → owner → role →
+        named user). Editable only on a draft. <strong>Fire one</strong> by letting a short test
+        policy's target lapse.</li>
+    <li>◐ <strong>Pause on wait states.</strong> An item entering a state flagged as "pausing"
+        (e.g. <em>Waiting on customer</em>) should stop the SLA clock, and resume correctly on
+        leaving. Code shipped, no confirmed founder walk — test deliberately.</li>
+    <li><strong>Breach behaviour.</strong> Once a clock breaches it stays marked breached even if
+        later events make a resolution look on-time. It <strong>never resets</strong>. Confirm it
+        does not silently clear itself.</li>
+</ul>
+
+<h2>4. Approvals</h2>
+<p>▣ Verified 2026-10-04 on Fortune Electronics. Confirmed working:</p>
+<ul>
+    <li>A banner reading <strong>"Step N of M"</strong> while an approval is in progress.</li>
+    <li>Approve / Reject actions, each requiring the <strong>real</strong> approver — no impersonation.</li>
+    <li>Submit-for-approval action.</li>
+    <li>The item's state is gated — it cannot move to Done while an approval is pending.</li>
+    <li>An approval <strong>History</strong> showing real names, not IDs.</li>
+    <li>The list of eligible approvers is access-controlled — only people allowed to approve see
+        or act on that step.</li>
+    <li>A <strong>blocked item</strong> is checked and refused at the final approval step, not
+        silently allowed through.</li>
+</ul>
+<div class="note">
+<p><strong>Prerequisite:</strong> to test the notification side you need a work item
+<strong>type that has an approval chain configured</strong> — not every work type does. If no
+approval option appears on an item, ask whoever set up the tenant's work types before
+concluding it is broken.</p>
+</div>
+
+<h2>5. Reports &amp; Dashboard</h2>
+<p>▣ Verified 2026-09-29 on Fortune Electronics. Reached via <strong>Work → Dashboard</strong> —
+this is the module's own dashboard, not the general company dashboard. It is also what the older
+<em>Service Reports</em> nav item now redirects to.</p>
+<table>
+    <thead><tr><th>Report</th><th>What it measures</th></tr></thead>
+    <tbody>
+        <tr><td>SLA Compliance</td><td>First-response and resolution SLA outcomes per period</td></tr>
+        <tr><td>Mean Time to Resolution (MTTR)</td><td>Time from creation to first resolution per period</td></tr>
+        <tr><td>First-Time Resolution (FTR)</td><td>Share of resolved work not reopened since</td></tr>
+        <tr><td>CSAT Summary</td><td>Satisfaction requests sent, response rate, average rating per period</td></tr>
+        <tr><td>Technician Performance</td><td>Open load, resolved count, resolution time per technician</td></tr>
+    </tbody>
+</table>
+<ul>
+    <li>Dashboard shows tiles (Open / SLA / Due / KPIs) plus an <strong>At-risk panel</strong> —
+        items approaching an SLA breach light up there in real time. <strong>This is currently the
+        only place SLA risk is visible in the UI.</strong></li>
+    <li>There is <strong>no Overdue and no Awaiting-approval tile</strong>. Do not expect them.</li>
+    <li>If a report or the dashboard looks empty: check <code>work:work_item:read</code> (Dashboard)
+        or the matching <code>reports:work_*:read</code> key (each report has its own) before
+        assuming it is broken.</li>
+</ul>
+
+<h2>6. Permissions reference</h2>
+<table>
+    <thead><tr><th>Key</th><th>Gates</th></tr></thead>
+    <tbody>
+        <tr><td><code>work:work_item:read</code></td><td>My Work, Inbox, <strong>Dashboard</strong> nav leaves; viewing work items</td></tr>
+        <tr><td><code>work:work_item:approve</code></td><td>Approve action</td></tr>
+        <tr><td><code>work:work_item:delete</code></td><td>Delete action</td></tr>
+        <tr><td><code>work:work_item:assign</code></td><td>Assign action</td></tr>
+        <tr><td><code>work:sla_policy:read</code></td><td>SLA Policies settings; also auto-grants all five KPI report keys</td></tr>
+        <tr><td><code>work:csat:read</code></td><td>Individual satisfaction answers; also auto-grants the CSAT Summary report key</td></tr>
+        <tr><td><code>reports:work_sla_compliance:read</code></td><td>SLA Compliance report</td></tr>
+        <tr><td><code>reports:work_mttr:read</code></td><td>MTTR report</td></tr>
+        <tr><td><code>reports:work_ftr:read</code></td><td>FTR report</td></tr>
+        <tr><td><code>reports:work_csat_summary:read</code></td><td>CSAT Summary report</td></tr>
+        <tr><td><code>reports:work_technician_performance:read</code></td><td>Technician Performance report</td></tr>
+        <tr><td><code>service:ticket:read</code></td><td>Legacy "Service Reports" leaf (redirects to Work dashboard)</td></tr>
+    </tbody>
+</table>
+<p class="src">The <code>owner</code> role gets every Work/Service key automatically.</p>
+
+<h2>Current recording state</h2>
+<p class="note">
+<strong>0 recordings in this run.</strong> Every test above is a test that does not yet exist as
+code. The next step is a human handoff: record the first test with <code>codegen</code>. The
+recording is the test — no AI writes selectors.
+</p>
+
+</body>
+</html>
