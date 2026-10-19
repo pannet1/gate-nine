@@ -192,10 +192,34 @@ def run_cases(
     run_dir: Path,
     runner: Callable[[str, Path], dict[str, Any]] = run_case,
     delay: float | None = None,
+    on_result: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
-    """Every case, one at a time. The tenant is shared state, so never parallel."""
+    """Every case, one at a time, in cases.yml order. Never parallel — the
+    tenant is shared state.
+
+    A failing case does not stop the others: each one launches its own browser,
+    so one broken selector is one broken case, not a broken run. The loop
+    continues until every case has either completed or been named as failed.
+
+    STEP_DELAY holds between cases so a human can watch what was just entered
+    before the next browser appears.
+    """
     pause = settings.step_delay if delay is None else delay
-    results = [runner(case, run_dir) for case in cases]
+    results: list[dict[str, Any]] = []
+    for index, case in enumerate(cases):
+        if index and pause:
+            time.sleep(pause)
+        result = runner(case, run_dir)
+        results.append(result)
+        # Recorded as it happens: a crash mid-run must not erase what already
+        # ran, and the event stream needs each case on its own.
+        _log(
+            run_dir.name,
+            f"case_{result['status']}",
+            {"case": case, "detail": result.get("detail", []), "seconds": result.get("seconds")},
+        )
+        if on_result:
+            on_result(result)
     return {
         "action": "ran",
         "run_id": run_dir.name,
@@ -262,7 +286,15 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{len(cases)} case(s) recorded — running them now")
     _log(run_dir.name, "run_start", {"cases": len(cases)})
 
-    summary = run_cases(cases, run_dir)
+    ws = Workspace(runs_root=runs_root, recordings_dir=recordings_dir)
+    results: list[dict[str, Any]] = []
+
+    def note_progress(result: dict[str, Any]) -> None:
+        """Rewrite session.md after every case, so a crash keeps the record."""
+        results.append(result)
+        ws.record_progress(run_dir, results)
+
+    summary = run_cases(cases, run_dir, on_result=note_progress)
     report_results(summary)
     _log(
         run_dir.name,
