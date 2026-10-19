@@ -214,55 +214,36 @@ class RunCasesTests(Tree):
 
         self.assertEqual(slept, [2.5], "one pause, between the cases, not before the first")
 
-    def test_progress_is_reported_after_every_case(self) -> None:
-        """A crash mid-run must not erase what already ran."""
-        run_dir = self.make_run("002", cases=["one", "two", "three"])
-        seen: list[list[str]] = []
 
-        def fake_runner(case: str, _run_dir: Path) -> dict:
-            return {"case": case, "status": "passed"}
+class SessionStaysAWorkListTests(Tree):
+    """session.md says what to do next. It never holds a verdict."""
 
-        run_cases(
-            ["one", "two", "three"],
-            run_dir,
-            runner=fake_runner,
-            delay=0,
-            on_result=lambda r: seen.append([r["case"]]),
-        )
+    def test_a_playback_result_is_not_written_into_it(self) -> None:
+        from app.tidy import render_session
 
-        self.assertEqual(seen, [["one"], ["two"], ["three"]])
-
-
-class CrashRecoveryTests(Tree):
-    """What survives when the browser dies part-way through a run."""
-
-    def test_session_records_what_ran_before_the_crash(self) -> None:
-        run_dir = self.make_run("002", cases=["one", "two", "three"])
-        for case in ("one", "two", "three"):
-            self.make_case(case)
-        ws = Workspace(self.runs, self.recordings)
-
-        ws.record_progress(run_dir, [{"case": "one", "status": "passed"}])
-        text = (run_dir / "session.md").read_text()
-
-        self.assertIn("Played back 1 of 3", text)
-        self.assertIn("Next: `two`", text)
-
-    def test_a_failed_case_is_kept_in_the_record(self) -> None:
         run_dir = self.make_run("002", cases=["one", "two"])
         for case in ("one", "two"):
             self.make_case(case)
-        ws = Workspace(self.runs, self.recordings)
+        Workspace(self.runs, self.recordings).sync_run("002")
 
-        ws.record_progress(
-            run_dir,
-            [{"case": "one", "status": "passed"}, {"case": "two", "status": "failed"}],
-        )
-        text = (run_dir / "session.md").read_text()
+        text = render_session(run_dir, None, ["one", "two"], self.recordings)
 
-        self.assertIn("Failed: two", text)
-        self.assertIn("`two` — failed", text)
-        self.assertIn("Every case in cases.yml was played.", text)
+        self.assertNotIn("passed", text)
+        self.assertNotIn("failed", text)
+        self.assertNotIn("Played back", text)
+        self.assertIn("Every case has a recording.", text)
+
+    def test_it_names_the_one_thing_to_do_next(self) -> None:
+        from app.tidy import render_session
+
+        run_dir = self.make_run("002", cases=["one", "two"])
+        self.make_case("one")
+        self.make_case("two", recording=False)
+        Workspace(self.runs, self.recordings).sync_run("002")
+
+        text = render_session(run_dir, None, ["one", "two"], self.recordings)
+
+        self.assertIn("Working on: `two`", text)
 
 
 class MainTests(Tree):
@@ -302,8 +283,8 @@ class MainTests(Tree):
 
         self.assertEqual(code, EXIT_OK, out)
         session = (self.runs / "002" / "session.md").read_text()
-        self.assertIn("Every case in cases.yml was played.", session)
-        self.assertIn("`effort-hours` — passed", session)
+        self.assertIn("Every case has a recording.", session)
+        self.assertNotIn("passed", session, "session.md never holds a verdict")
 
     def test_tidy_links_before_the_case_runs(self) -> None:
         run_dir = self.make_run("002", cases=["lazy"])

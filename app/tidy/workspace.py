@@ -62,17 +62,6 @@ class Workspace:
         """linkable / missing a .py / missing a url.txt, for any case list."""
         return classify(self.recordings_dir, cases)
 
-    def record_progress(self, run_dir: Path, results: list[dict[str, Any]]) -> Path:
-        """Note how far a playback pass has got, rewriting session.md.
-
-        Called after every case, so a browser that dies part-way through still
-        leaves behind what ran, what failed, and what is left.
-        """
-        cases = self.cases_for(run_dir.name) or [r.get("case") for r in results]
-        return write_session(
-            run_dir, self._brief(run_dir), cases, self.recordings_dir, results
-        )
-
     # -- the work ----------------------------------------------------------
 
     def _prepare_files(self, cases: list[str]) -> None:

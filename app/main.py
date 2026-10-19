@@ -192,7 +192,6 @@ def run_cases(
     run_dir: Path,
     runner: Callable[[str, Path], dict[str, Any]] = run_case,
     delay: float | None = None,
-    on_result: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Every case, one at a time, in cases.yml order. Never parallel — the
     tenant is shared state.
@@ -211,15 +210,17 @@ def run_cases(
             time.sleep(pause)
         result = runner(case, run_dir)
         results.append(result)
-        # Recorded as it happens: a crash mid-run must not erase what already
-        # ran, and the event stream needs each case on its own.
+        # One event per case as it happens, so a run that dies part-way still
+        # left a record of everything before it.
         _log(
             run_dir.name,
             f"case_{result['status']}",
-            {"case": case, "detail": result.get("detail", []), "seconds": result.get("seconds")},
+            {
+                "case": case,
+                "detail": result.get("detail", []),
+                "seconds": result.get("seconds"),
+            },
         )
-        if on_result:
-            on_result(result)
     return {
         "action": "ran",
         "run_id": run_dir.name,
@@ -286,15 +287,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{len(cases)} case(s) recorded — running them now")
     _log(run_dir.name, "run_start", {"cases": len(cases)})
 
-    ws = Workspace(runs_root=runs_root, recordings_dir=recordings_dir)
-    results: list[dict[str, Any]] = []
-
-    def note_progress(result: dict[str, Any]) -> None:
-        """Rewrite session.md after every case, so a crash keeps the record."""
-        results.append(result)
-        ws.record_progress(run_dir, results)
-
-    summary = run_cases(cases, run_dir, on_result=note_progress)
+    summary = run_cases(cases, run_dir)
     report_results(summary)
     _log(
         run_dir.name,
