@@ -145,10 +145,11 @@ is the one to work on.
 The recording **is** the test. `playwright codegen` records real selectors from the live DOM.
 
 ### 4.1 Auth — infrastructure, recorded once
-Login is never part of a test.
+Login is never part of a test. It is saved into the case folder so the recording finds it by
+bare name when run from there:
 
 ```bash
-uv run playwright codegen --save-storage=<run>/auth.json https://<tenant>/login/
+uv run playwright codegen --save-storage=_template/<case>/auth.json https://<tenant>/login/
 ```
 
 The human logs in by hand, then closes. `auth.json` is gitignored. It is machine-local and
@@ -201,9 +202,33 @@ uv run playwright codegen --load-storage=_template/<case>/auth.json -o _template
 ```
 
 The human clicks through the flow. Every action is captured. Then you append the screenshot
-line (§4.3).
+line (§4.4).
 
-### 4.3 Append the screenshot line — your job, after recording
+### 4.3 Tidy up what the human leaves behind
+
+Expect the human to be lazy. The most likely thing they do is drop the recording straight
+into `_template/`, flat:
+
+```
+_template/sales-invoice.py     ← a file, not a folder
+```
+
+**Organising that is your job, not theirs to be told about.** On every pass, look for loose
+`<case>.py` files sitting in `_template/` and give each one its folder:
+
+```bash
+mkdir -p _template/sales-invoice
+mv _template/sales-invoice.py _template/sales-invoice/sales-invoice.py
+```
+
+The filename is the case name. Do not ask the human to rename it, do not reject the work, do
+not make them record it again. Tidy it yourself, then carry on to the symlink.
+
+Apply the same judgement to anything else left flat — a stray `auth.json`, a `url.txt` dropped
+in the wrong place. Move it to where the layout expects it and continue. Only stop and ask
+when you genuinely cannot tell what something is.
+
+### 4.4 Append the screenshot line — your job, after recording
 
 The human never takes a screenshot manually, and `codegen` has no button for it.
 
