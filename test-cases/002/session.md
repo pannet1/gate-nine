@@ -5,11 +5,9 @@ Recordings: `recordings`
 
 ## Cases
 
-- [ ] `effort-hours` — pending
-- [ ] `sales-invoice` — pending
+- [x] `sales-invoice` — complete
 
 ## Now
 
-Working on: `effort-hours`
-
-Blocked: `002/effort-hours/url.txt` is missing — the URL is unknown. Ask the developer, do not infer it.
+Every case has a recording.
+Updated: 2026-10-19T10:35:17+00:00

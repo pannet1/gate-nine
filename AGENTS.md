@@ -310,27 +310,32 @@ rewrite interactions, and you do not touch selectors.
 
 ---
 
-## 5. Replaying tests — the human runs the loop
-
-**A human starts the run. You do not.** The main loop executes every test in the run folder,
-one after another, in order:
+## 5. Replaying tests — one command
 
 ```bash
-cd /home/pannet1/gate-nine && uv run python -m app.driver
+cd /home/pannet1/gate-nine && uv run python -m app.main
 ```
 
-What it does, per run folder:
+That is the whole interface. `app/main.py` walks the loop and stops the moment a human is needed:
 
 1. Find the highest-numbered folder under `test-cases/`.
-2. Require the `.md` brief. Without it, stop.
-3. Find every `<case>/` subfolder and run each `<case>.py` inside it, sequentially.
-4. `cd` into the case folder before running it. The recordings use bare relative
-   paths — `storage_state="auth.json"` and `screenshot.png` — so the working
-   directory must be the case folder for them to resolve.
-5. One test at a time. Never parallel — the tenant is shared state.
-6. When every case finishes, the loop breaks and reports.
+2. Require `cases.yml`. **No cases.yml means nothing to run** — it exits `2` and says so, without
+   touching anything. There is no fallback list; deriving one from the filesystem would run
+   whatever was lying around against the wrong brief.
+3. Tidy: move loose recordings, fix drifted names, point at `auth.json`, link into the run,
+   rewrite `session.md`.
+4. Anything still missing — a URL, a `.py` — is the human's. It prints the runnable command and
+   exits `1` without running a single case.
+5. Otherwise run every case in `cases.yml`, one at a time, in a visible browser.
 
-A single case can also be run on its own:
+Each case runs with its case folder as the working directory, because the recordings use bare
+relative paths — `storage_state="../auth.json"` and `screenshot.png`. One test at a time, never
+parallel: the tenant is shared state. A failing case does not stop the others; the summary names
+which ones failed.
+
+Exit codes: `0` all passed · `1` handed off, or a case failed · `2` cannot run.
+
+A single case can still be run on its own:
 
 ```bash
 cd /home/pannet1/gate-nine/test-cases/001/sales-invoice && uv run python sales-invoice.py
@@ -388,5 +393,5 @@ start a watcher, do not poll for pushes, do not offer to fix the product.
 | `EVENTS_PASSWORD` | HTTP Basic Auth password for that endpoint |
 | `STEP_DELAY` | Seconds to hold between operations so a human can follow. Default 3. |
 
-Run everything from the project root, or `python -m app.driver` fails with
+Run everything from the project root, or `python -m app.main` fails with
 `ModuleNotFoundError: No module named 'app'`.
