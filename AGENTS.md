@@ -83,19 +83,27 @@ When that happens:
 2. **Give one command, exact and runnable.** Real path, real flags, ready to paste. Not a
    sketch. Not "something like".
 3. **Say what you expect from it** — what file should appear, what they should see.
-4. **Write the same command to a file in the case folder**, as
-   `test-cases/<run>/<case>/handoff.sh`. Make it runnable — shebang, `set -euo pipefail`, the
-   real paths. The human can read your reply, but the command must survive it: the reply
-   scrolls away, the file does not. Overwrite it each time you hand off, so it always holds the
-   current next action.
+4. **Record it.** Write what you did and what you handed off to
+   `test-cases/<run>/<case>/session.md` — see §2.6.
 5. **Stop.** Wait. Do not run it yourself. Do not guess what they did. Do not proceed on the
    assumption it worked.
 
-Create the case folder if it does not exist yet — a handoff for a case being recorded for the
-first time is the folder's first occupant.
+If a command is long, still give one line in the reply. One line beats a paragraph.
 
-If a command is long, the handoff script *is* the answer: hand over
-`bash test-cases/<run>/<case>/handoff.sh`. One line beats a paragraph.
+### 2.6 The session record
+
+A reply scrolls away. The next AI agent picking up this repo has no memory of it. So every
+handoff is also written down:
+
+**Where:** `test-cases/<run>/<case>/session.md`. Create the case folder if it does not exist
+yet. Append, never overwrite — the value is the history.
+
+**What goes in it:** everything you said and everything you did, in order. What you found, what
+you decided and why, what you changed, what you refused to do, what you handed off, and what is
+still blocked. Enough that a cold agent can pick up without re-deriving anything.
+
+**Not this:** the file is a record of what happened. It is not a plan, a report on the product,
+or a summary of the brief.
 
 ---
 
