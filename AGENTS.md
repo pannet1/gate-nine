@@ -221,9 +221,11 @@ cd /home/pannet1/gate-nine && uv run python -m app.tidy --dry-run   # report onl
 cd /home/pannet1/gate-nine && uv run python -m app.tidy             # tidy, link, report
 ```
 
-It gives every loose `recordings/<case>.py` its folder, symlinks each case folder into the
-run, writes `session.md`, and reports what it did. It is idempotent — a second pass reports
-`already-linked` and changes nothing. `--dry-run` reports without touching disk.
+It gives every loose `recordings/<case>.py` its folder, renames a recording whose name drifted
+from its folder (`effort-hours/effort-hour.py` → `effort-hours/effort-hours.py`), symlinks each
+case folder into the run, writes `session.md`, and reports what it did. A case with two
+recordings is ambiguous — it reports and touches nothing. It is idempotent — a second pass
+reports `already-linked` and changes nothing. `--dry-run` reports without touching disk.
 
 The filename is the case name. Do not ask the human to rename it, do not reject the work, do
 not make them record it again. Tidy it yourself, then carry on.

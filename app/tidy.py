@@ -10,7 +10,8 @@ from what exists in ``recordings/``, or from ``--cases``.
 
 What it does, in order:
 
-1. **Tidy** — a loose ``recordings/<case>.py`` becomes ``recordings/<case>/<case>.py``.
+1. **Tidy** — a loose ``recordings/<case>.py`` becomes ``recordings/<case>/<case>.py``,
+   and a recording whose name drifted from its folder is renamed to match.
 2. **Link** — each case with a template folder gets a symlink at
    ``test-cases/<run>/<case> -> ../../recordings/<case>``.
 3. **Report** — every case is complete or not, and ``session.md`` is rewritten
@@ -54,6 +55,44 @@ def tidy_recordings(recordings_dir: Path) -> list[dict[str, Any]]:
         entry.replace(destination)
         moved.append({"case": case, "from": str(entry), "to": str(destination)})
     return moved
+
+
+def normalise_recordings(recordings_dir: Path) -> list[dict[str, Any]]:
+    """Make each case folder's recording match its folder name.
+
+    A lazy or typo-prone human leaves ``<case>/<different>.py``. The link still
+    works, but the completion check looks for ``<case>/<case>.py`` and would
+    report the case pending forever. Rename it when there is exactly one
+    candidate, so the intent is obvious.
+
+    More than one recording in the folder is ambiguous — leave it and say so.
+    """
+    fixed: list[dict[str, Any]] = []
+    if not recordings_dir.is_dir():
+        return fixed
+
+    for case_dir in sorted(e for e in recordings_dir.iterdir() if e.is_dir()):
+        expected = case_dir / f"{case_dir.name}{RECORDING_SUFFIX}"
+        if expected.exists():
+            continue
+        candidates = [
+            entry for entry in sorted(case_dir.iterdir())
+            if entry.is_file() and entry.suffix == RECORDING_SUFFIX
+        ]
+        if len(candidates) != 1:
+            if candidates:
+                fixed.append({
+                    "case": case_dir.name,
+                    "ambiguous": [c.name for c in candidates],
+                })
+            continue
+        candidates[0].replace(expected)
+        fixed.append({
+            "case": case_dir.name,
+            "from": candidates[0].name,
+            "to": expected.name,
+        })
+    return fixed
 
 
 def case_folders(recordings_dir: Path) -> list[str]:
@@ -178,6 +217,7 @@ def prepare(
     brief = briefs[0] if briefs else None
 
     tidied = [] if dry_run else tidy_recordings(recordings_dir)
+    renamed = [] if dry_run else normalise_recordings(recordings_dir)
     if dry_run:
         tidied = [
             {"case": e.stem, "from": str(e), "to": str(recordings_dir / e.stem / e.name)}
@@ -198,6 +238,7 @@ def prepare(
         "run_id": run_dir.name,
         "brief": brief.name if brief else None,
         "tidied": tidied,
+        "renamed": renamed,
         "linked": links,
         "states": states,
         "pending": [case for case in names if states[case] == "pending"],
@@ -210,7 +251,9 @@ def main() -> None:
         description="Tidy loose recordings, link them into the run, report state."
     )
     parser.add_argument("--runs-root", default=str(DEFAULT_RUNS_ROOT))
-    parser.add_argument("--recordings", default=str(DEFAULT_RECORDINGS_DIR))
+    parser.add_argument(
+        "--recordings", dest="recordings_dir", default=str(DEFAULT_RECORDINGS_DIR)
+    )
     parser.add_argument("--run-id", help="target a specific run instead of the latest")
     parser.add_argument("--cases", help="comma-separated case names, overrides discovery")
     parser.add_argument(

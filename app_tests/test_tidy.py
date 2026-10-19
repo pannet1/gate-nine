@@ -12,6 +12,7 @@ from pathlib import Path
 
 from app.tidy import (
     case_folders,
+    normalise_recordings,
     case_state,
     link_case,
     link_cases,
@@ -96,6 +97,55 @@ class TidyTemplateTests(TempTree):
 
     def test_missingrecordings_dir_is_not_an_error(self) -> None:
         self.assertEqual(tidy_recordings(self.root / "nope"), [])
+
+
+class NormaliseRecordingTests(TempTree):
+    """A recording whose name drifted from its folder is renamed to match."""
+
+    def test_drifted_name_is_renamed_to_match_the_folder(self) -> None:
+        case_dir = self.make_case("effort-hours")
+        (case_dir / "effort-hours.py").rename(case_dir / "effort-hour.py")
+
+        fixed = normalise_recordings(self.recordings)
+
+        self.assertEqual(len(fixed), 1)
+        self.assertEqual(fixed[0]["case"], "effort-hours")
+        self.assertTrue((case_dir / "effort-hours.py").is_file())
+        self.assertFalse((case_dir / "effort-hour.py").exists())
+
+    def test_correctly_named_recording_is_left_alone(self) -> None:
+        self.make_case("effort-hours")
+
+        self.assertEqual(normalise_recordings(self.recordings), [])
+
+    def test_two_recordings_are_ambiguous_and_left_alone(self) -> None:
+        case_dir = self.make_case("effort-hours")
+        (case_dir / "effort-hours.py").rename(case_dir / "effort-hour.py")
+        (case_dir / "other.py").write_text("# another\n", encoding="utf-8")
+
+        fixed = normalise_recordings(self.recordings)
+
+        self.assertEqual(len(fixed[0]["ambiguous"]), 2)
+        self.assertTrue((case_dir / "effort-hour.py").is_file(), "nothing may be renamed")
+        self.assertTrue((case_dir / "other.py").is_file())
+
+    def test_empty_case_folder_is_untouched(self) -> None:
+        (self.recordings / "not-recorded-yet").mkdir()
+
+        self.assertEqual(normalise_recordings(self.recordings), [])
+
+    def test_drifted_case_counts_as_complete_after_the_fix(self) -> None:
+        """The bug this prevents: a drifted name left the case pending forever."""
+        run_dir = self.make_run()
+        case_dir = self.make_case("effort-hours")
+        (case_dir / "effort-hours.py").rename(case_dir / "effort-hour.py")
+        link_case(run_dir, self.recordings, "effort-hours")
+
+        self.assertEqual(case_state(run_dir, "effort-hours"), "pending")
+
+        prepare(runs_root=self.runs, recordings_dir=self.recordings)
+
+        self.assertEqual(case_state(run_dir, "effort-hours"), "complete")
 
 
 class LinkCaseTests(TempTree):
