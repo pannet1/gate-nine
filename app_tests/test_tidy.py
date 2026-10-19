@@ -17,21 +17,21 @@ from app.tidy import (
     link_cases,
     prepare,
     render_session,
-    tidy_template,
+    tidy_recordings,
     write_session,
 )
 
 
 class TempTree(unittest.TestCase):
-    """Gives each test a repo-shaped tree: runs/ and _template/."""
+    """Gives each test a repo-shaped tree: runs/ and recordings/."""
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
         self.runs = self.root / "test-cases"
-        self.template = self.root / "_template"
+        self.recordings = self.root / "recordings"
         self.runs.mkdir()
-        self.template.mkdir()
+        self.recordings.mkdir()
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -43,7 +43,7 @@ class TempTree(unittest.TestCase):
         return run_dir
 
     def make_case(self, case: str, *, recording: bool = True, url: bool = True) -> Path:
-        case_dir = self.template / case
+        case_dir = self.recordings / case
         case_dir.mkdir()
         if recording:
             (case_dir / f"{case}.py").write_text(
@@ -56,46 +56,46 @@ class TempTree(unittest.TestCase):
 
 class TidyTemplateTests(TempTree):
     def test_loose_recording_is_moved_into_its_case_folder(self) -> None:
-        """The lazy path: the human drops a flat .py into _template/."""
-        loose = self.template / "sales-invoice.py"
+        """The lazy path: the human drops a flat .py into recordings/."""
+        loose = self.recordings / "sales-invoice.py"
         loose.write_text("# recorded\n", encoding="utf-8")
 
-        moved = tidy_template(self.template)
+        moved = tidy_recordings(self.recordings)
 
         self.assertEqual(len(moved), 1)
         self.assertEqual(moved[0]["case"], "sales-invoice")
         self.assertFalse(loose.exists(), "the flat file should be gone")
-        self.assertTrue((self.template / "sales-invoice" / "sales-invoice.py").is_file())
+        self.assertTrue((self.recordings / "sales-invoice" / "sales-invoice.py").is_file())
 
     def test_recording_already_in_a_folder_is_left_alone(self) -> None:
         self.make_case("purchase-bill")
 
-        moved = tidy_template(self.template)
+        moved = tidy_recordings(self.recordings)
 
         self.assertEqual(moved, [])
-        self.assertTrue((self.template / "purchase-bill" / "purchase-bill.py").is_file())
+        self.assertTrue((self.recordings / "purchase-bill" / "purchase-bill.py").is_file())
 
     def test_tidy_is_idempotent(self) -> None:
-        (self.template / "effort-hours.py").write_text("# x\n", encoding="utf-8")
+        (self.recordings / "effort-hours.py").write_text("# x\n", encoding="utf-8")
 
-        first = tidy_template(self.template)
-        second = tidy_template(self.template)
+        first = tidy_recordings(self.recordings)
+        second = tidy_recordings(self.recordings)
 
         self.assertEqual(len(first), 1)
         self.assertEqual(second, [])
-        self.assertTrue((self.template / "effort-hours" / "effort-hours.py").is_file())
+        self.assertTrue((self.recordings / "effort-hours" / "effort-hours.py").is_file())
 
     def test_tidy_keeps_non_python_files_where_they_are(self) -> None:
-        notes = self.template / "README.txt"
+        notes = self.recordings / "README.txt"
         notes.write_text("scratch\n", encoding="utf-8")
 
-        tidy_template(self.template)
+        tidy_recordings(self.recordings)
 
         self.assertTrue(notes.is_file())
-        self.assertFalse((self.template / "README").exists())
+        self.assertFalse((self.recordings / "README").exists())
 
-    def test_missing_template_dir_is_not_an_error(self) -> None:
-        self.assertEqual(tidy_template(self.root / "nope"), [])
+    def test_missingrecordings_dir_is_not_an_error(self) -> None:
+        self.assertEqual(tidy_recordings(self.root / "nope"), [])
 
 
 class LinkCaseTests(TempTree):
@@ -106,29 +106,29 @@ class LinkCaseTests(TempTree):
     def test_link_is_created_pointing_two_levels_up(self) -> None:
         self.make_case("subtasks")
 
-        result = link_case(self.run_dir, self.template, "subtasks")
+        result = link_case(self.run_dir, self.recordings, "subtasks")
 
         self.assertEqual(result, "created")
         link = self.run_dir / "subtasks"
         self.assertTrue(link.is_symlink())
-        self.assertEqual(Path(os.readlink(link)), Path("../../_template/subtasks"))
+        self.assertEqual(Path(os.readlink(link)), Path("../../recordings/subtasks"))
         self.assertTrue(link.is_dir(), "the link should resolve to the case folder")
 
     def test_linking_twice_changes_nothing(self) -> None:
         self.make_case("attachments")
 
-        self.assertEqual(link_case(self.run_dir, self.template, "attachments"), "created")
-        self.assertEqual(link_case(self.run_dir, self.template, "attachments"), "already-linked")
+        self.assertEqual(link_case(self.run_dir, self.recordings, "attachments"), "created")
+        self.assertEqual(link_case(self.run_dir, self.recordings, "attachments"), "already-linked")
 
     def test_wrong_target_is_repaired(self) -> None:
         self.make_case("dispatch")
         stale = self.run_dir / "dispatch"
         stale.symlink_to(Path("../../../elsewhere/dispatch"), target_is_directory=True)
 
-        result = link_case(self.run_dir, self.template, "dispatch")
+        result = link_case(self.run_dir, self.recordings, "dispatch")
 
         self.assertEqual(result, "repaired")
-        self.assertEqual(Path(os.readlink(stale)), Path("../../_template/dispatch"))
+        self.assertEqual(Path(os.readlink(stale)), Path("../../recordings/dispatch"))
 
     def test_a_real_directory_is_never_replaced(self) -> None:
         """Something is living where the link belongs. Do not destroy it."""
@@ -136,14 +136,14 @@ class LinkCaseTests(TempTree):
         squatter.mkdir()
         (squatter / "keep.txt").write_text("mine\n", encoding="utf-8")
 
-        result = link_case(self.run_dir, self.template, "reports")
+        result = link_case(self.run_dir, self.recordings, "reports")
 
         self.assertEqual(result, "skipped")
         self.assertFalse((self.run_dir / "reports").is_symlink())
         self.assertTrue((squatter / "keep.txt").is_file())
 
-    def test_case_with_no_template_folder_still_gets_a_link(self) -> None:
-        result = link_case(self.run_dir, self.template, "not-recorded-yet")
+    def test_case_with_norecordings_folder_still_gets_a_link(self) -> None:
+        result = link_case(self.run_dir, self.recordings, "not-recorded-yet")
 
         self.assertEqual(result, "created")
         self.assertTrue((self.run_dir / "not-recorded-yet").is_symlink())
@@ -153,7 +153,7 @@ class LinkCaseTests(TempTree):
         self.make_case("one")
         self.make_case("two")
 
-        report = link_cases(self.run_dir, self.template, ["one", "two", "three"])
+        report = link_cases(self.run_dir, self.recordings, ["one", "two", "three"])
 
         self.assertEqual(report, {"one": "created", "two": "created", "three": "created"})
 
@@ -163,21 +163,21 @@ class CaseStateTests(TempTree):
         run_dir = self.make_run()
         self.make_case("effort-hours")
 
-        link_case(run_dir, self.template, "effort-hours")
+        link_case(run_dir, self.recordings, "effort-hours")
 
         self.assertEqual(case_state(run_dir, "effort-hours"), "complete")
 
     def test_case_without_a_recording_is_pending(self) -> None:
         run_dir = self.make_run()
-        (self.template / "sla-versions").mkdir()
+        (self.recordings / "sla-versions").mkdir()
 
-        link_case(run_dir, self.template, "sla-versions")
+        link_case(run_dir, self.recordings, "sla-versions")
 
         self.assertEqual(case_state(run_dir, "sla-versions"), "pending")
 
     def test_case_with_nothing_at_all_is_pending(self) -> None:
         run_dir = self.make_run()
-        link_case(run_dir, self.template, "ghost")
+        link_case(run_dir, self.recordings, "ghost")
 
         self.assertEqual(case_state(run_dir, "ghost"), "pending")
 
@@ -187,13 +187,13 @@ class SessionTests(TempTree):
         run_dir = self.make_run()
         self.make_case("done-case")
         self.make_case("todo-case", recording=False)
-        link_cases(run_dir, self.template, ["done-case", "todo-case"])
+        link_cases(run_dir, self.recordings, ["done-case", "todo-case"])
 
         text = render_session(
             run_dir,
             run_dir / "Work Platform — Test Manual.md",
             ["done-case", "todo-case"],
-            self.template,
+            self.recordings,
         )
 
         self.assertIn("- [x] `done-case` — complete", text)
@@ -203,9 +203,9 @@ class SessionTests(TempTree):
         """Unrecorded and no URL: the human cannot record it yet."""
         run_dir = self.make_run()
         self.make_case("effort-hours", recording=False, url=False)
-        link_cases(run_dir, self.template, ["effort-hours"])
+        link_cases(run_dir, self.recordings, ["effort-hours"])
 
-        text = render_session(run_dir, None, ["effort-hours"], self.template)
+        text = render_session(run_dir, None, ["effort-hours"], self.recordings)
 
         self.assertIn("Working on: `effort-hours`", text)
         self.assertIn("url.txt", text)
@@ -215,9 +215,9 @@ class SessionTests(TempTree):
         """The recording already carries its URL in page.goto(). Nothing is blocked."""
         run_dir = self.make_run()
         self.make_case("effort-hours", url=False)
-        link_cases(run_dir, self.template, ["effort-hours"])
+        link_cases(run_dir, self.recordings, ["effort-hours"])
 
-        text = render_session(run_dir, None, ["effort-hours"], self.template)
+        text = render_session(run_dir, None, ["effort-hours"], self.recordings)
 
         self.assertNotIn("Blocked", text)
         self.assertIn("The loop is done for this run", text)
@@ -225,30 +225,30 @@ class SessionTests(TempTree):
     def test_session_does_not_claim_a_blocker_when_url_exists(self) -> None:
         run_dir = self.make_run()
         self.make_case("effort-hours")
-        link_cases(run_dir, self.template, ["effort-hours"])
+        link_cases(run_dir, self.recordings, ["effort-hours"])
 
-        text = render_session(run_dir, None, ["effort-hours"], self.template)
+        text = render_session(run_dir, None, ["effort-hours"], self.recordings)
 
         self.assertNotIn("Blocked", text)
 
     def test_session_reports_done_when_nothing_is_pending(self) -> None:
         run_dir = self.make_run()
         self.make_case("all-done")
-        link_cases(run_dir, self.template, ["all-done"])
+        link_cases(run_dir, self.recordings, ["all-done"])
 
-        text = render_session(run_dir, None, ["all-done"], self.template)
+        text = render_session(run_dir, None, ["all-done"], self.recordings)
 
         self.assertIn("The loop is done for this run", text)
 
     def test_write_session_replaces_rather_than_appends(self) -> None:
         run_dir = self.make_run()
         self.make_case("one")
-        link_cases(run_dir, self.template, ["one"])
-        write_session(run_dir, None, ["one"], self.template)
+        link_cases(run_dir, self.recordings, ["one"])
+        write_session(run_dir, None, ["one"], self.recordings)
 
         self.make_case("two")
-        link_cases(run_dir, self.template, ["one", "two"])
-        write_session(run_dir, None, ["one", "two"], self.template)
+        link_cases(run_dir, self.recordings, ["one", "two"])
+        write_session(run_dir, None, ["one", "two"], self.recordings)
 
         text = (run_dir / "session.md").read_text(encoding="utf-8")
         self.assertEqual(text.count("# Run"), 1, "session.md must be rewritten, not appended")
@@ -257,11 +257,11 @@ class SessionTests(TempTree):
 class PrepareTests(TempTree):
     def test_full_pass_tidies_links_and_writes_the_session(self) -> None:
         self.make_run()
-        (self.template / "effort-hours.py").write_text("# recorded\n", encoding="utf-8")
-        (self.template / "subtasks").mkdir()
-        (self.template / "subtasks" / "subtasks.py").write_text("# x\n", encoding="utf-8")
+        (self.recordings / "effort-hours.py").write_text("# recorded\n", encoding="utf-8")
+        (self.recordings / "subtasks").mkdir()
+        (self.recordings / "subtasks" / "subtasks.py").write_text("# x\n", encoding="utf-8")
 
-        report = prepare(runs_root=self.runs, template_dir=self.template)
+        report = prepare(runs_root=self.runs, recordings_dir=self.recordings)
 
         self.assertEqual(report["action"], "prepared")
         self.assertEqual(report["run_id"], "002")
@@ -275,8 +275,8 @@ class PrepareTests(TempTree):
         self.make_run()
         self.make_case("subtasks")
 
-        first = prepare(runs_root=self.runs, template_dir=self.template)
-        second = prepare(runs_root=self.runs, template_dir=self.template)
+        first = prepare(runs_root=self.runs, recordings_dir=self.recordings)
+        second = prepare(runs_root=self.runs, recordings_dir=self.recordings)
 
         self.assertEqual(first["tidied"], [])
         self.assertEqual(second["tidied"], [])
@@ -284,13 +284,13 @@ class PrepareTests(TempTree):
 
     def test_dry_run_changes_nothing_on_disk(self) -> None:
         self.make_run()
-        (self.template / "lazy.py").write_text("# x\n", encoding="utf-8")
+        (self.recordings / "lazy.py").write_text("# x\n", encoding="utf-8")
 
-        report = prepare(runs_root=self.runs, template_dir=self.template, dry_run=True)
+        report = prepare(runs_root=self.runs, recordings_dir=self.recordings, dry_run=True)
 
         self.assertTrue(report["dry_run"])
-        self.assertTrue((self.template / "lazy.py").is_file(), "must not move anything")
-        self.assertFalse((self.template / "lazy").exists())
+        self.assertTrue((self.recordings / "lazy.py").is_file(), "must not move anything")
+        self.assertFalse((self.recordings / "lazy").exists())
         self.assertFalse((self.runs / "002" / "lazy").exists())
         self.assertFalse((self.runs / "002" / "session.md").exists())
 
@@ -299,7 +299,7 @@ class PrepareTests(TempTree):
         self.make_run("003")
         self.make_case("subtasks")
 
-        report = prepare(runs_root=self.runs, template_dir=self.template)
+        report = prepare(runs_root=self.runs, recordings_dir=self.recordings)
 
         self.assertEqual(report["run_id"], "003")
         self.assertTrue((self.runs / "003" / "subtasks").is_symlink())
@@ -310,7 +310,7 @@ class PrepareTests(TempTree):
         self.make_run("002")
         self.make_case("subtasks")
 
-        report = prepare(runs_root=self.runs, template_dir=self.template, run_id="001")
+        report = prepare(runs_root=self.runs, recordings_dir=self.recordings, run_id="001")
 
         self.assertEqual(report["run_id"], "001")
         self.assertTrue((self.runs / "001" / "subtasks").is_symlink())
@@ -321,18 +321,18 @@ class PrepareTests(TempTree):
         self.make_case("named-explicitly")
 
         report = prepare(
-            runs_root=self.runs, template_dir=self.template, cases=["named-explicitly"]
+            runs_root=self.runs, recordings_dir=self.recordings, cases=["named-explicitly"]
         )
 
         self.assertEqual(list(report["states"]), ["named-explicitly"])
 
     def test_missing_run_id_is_reported_not_raised(self) -> None:
-        report = prepare(runs_root=self.runs, template_dir=self.template, run_id="099")
+        report = prepare(runs_root=self.runs, recordings_dir=self.recordings, run_id="099")
 
         self.assertEqual(report["action"], "no-such-run")
 
     def test_no_run_folder_at_all_is_reported(self) -> None:
-        report = prepare(runs_root=self.runs / "elsewhere", template_dir=self.template)
+        report = prepare(runs_root=self.runs / "elsewhere", recordings_dir=self.recordings)
 
         self.assertEqual(report["action"], "no-run")
 
@@ -341,16 +341,16 @@ class PrepareTests(TempTree):
         run_dir.mkdir()
         self.make_case("subtasks")
 
-        report = prepare(runs_root=self.runs, template_dir=self.template)
+        report = prepare(runs_root=self.runs, recordings_dir=self.recordings)
 
         self.assertIsNone(report["brief"])
         self.assertTrue((run_dir / "subtasks").is_symlink())
 
     def test_case_folders_lists_only_real_directories(self) -> None:
         self.make_case("alpha")
-        (self.template / "beta.py").write_text("# flat\n", encoding="utf-8")
+        (self.recordings / "beta.py").write_text("# flat\n", encoding="utf-8")
 
-        self.assertEqual(case_folders(self.template), ["alpha"])
+        self.assertEqual(case_folders(self.recordings), ["alpha"])
 
 
 if __name__ == "__main__":

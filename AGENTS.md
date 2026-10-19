@@ -149,7 +149,7 @@ Login is never part of a test. It is saved into the case folder so the recording
 bare name when run from there:
 
 ```bash
-uv run playwright codegen --save-storage=_template/<case>/auth.json https://<tenant>/login/
+uv run playwright codegen --save-storage=recordings/<case>/auth.json https://<tenant>/login/
 ```
 
 The human logs in by hand, then closes. `auth.json` is gitignored. It is machine-local and
@@ -158,10 +158,10 @@ never travels with the repo — each machine generates its own.
 ### 4.2 Record a test — human drives, machine records
 The human drives the browser. You cannot. This is a handoff.
 
-**Each case is one real folder in `_template/`, written once by the human:**
+**Each case is one real folder in `recordings/`, written once by the human:**
 
 ```
-_template/<case>/
+recordings/<case>/
 ├── url.txt          # the real URL — never guessed, never assumed
 ├── auth.json        # saved auth state for this case
 ├── <case>.py        # the recording
@@ -171,7 +171,7 @@ _template/<case>/
 **You symlink the folder into each run, not the files inside it:**
 
 ```
-test-cases/<run>/<case>  ->  ../../_template/<case>
+test-cases/<run>/<case>  ->  ../../recordings/<case>
 ```
 
 Two levels up from `test-cases/<run>/` reaches the project root. One link per case.
@@ -188,7 +188,7 @@ the case from its own folder and they land correctly, with no path rewriting:
 cd /home/pannet1/gate-nine/test-cases/<run>/<case> && uv run python <case>.py
 ```
 
-Following the symlink, that working directory *is* `_template/<case>/`. So `auth.json` is
+Following the symlink, that working directory *is* `recordings/<case>/`. So `auth.json` is
 found and `screenshot.png` is written beside the recording, under its fixed name, with no
 collision between cases.
 
@@ -198,7 +198,7 @@ what answers "is this case done", link or file.
 **Recording command** — the human records into the case folder, and the URL comes from `url.txt`:
 
 ```bash
-uv run playwright codegen --load-storage=_template/<case>/auth.json -o _template/<case>/<case>.py "$(cat _template/<case>/url.txt)"
+uv run playwright codegen --load-storage=recordings/<case>/auth.json -o recordings/<case>/<case>.py "$(cat recordings/<case>/url.txt)"
 ```
 
 The human clicks through the flow. Every action is captured. Then you append the screenshot
@@ -207,10 +207,10 @@ line (§4.4).
 ### 4.3 Tidy up what the human leaves behind
 
 Expect the human to be lazy. The most likely thing they do is drop the recording straight
-into `_template/`, flat:
+into `recordings/`, flat:
 
 ```
-_template/sales-invoice.py     ← a file, not a folder
+recordings/sales-invoice.py     ← a file, not a folder
 ```
 
 **Organising that is your job, not theirs to be told about.** `app.tidy` already does the
@@ -221,7 +221,7 @@ cd /home/pannet1/gate-nine && uv run python -m app.tidy --dry-run   # report onl
 cd /home/pannet1/gate-nine && uv run python -m app.tidy             # tidy, link, report
 ```
 
-It gives every loose `_template/<case>.py` its folder, symlinks each case folder into the
+It gives every loose `recordings/<case>.py` its folder, symlinks each case folder into the
 run, writes `session.md`, and reports what it did. It is idempotent — a second pass reports
 `already-linked` and changes nothing. `--dry-run` reports without touching disk.
 
