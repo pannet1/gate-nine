@@ -313,8 +313,12 @@ rewrite interactions, and you do not touch selectors.
 ## 5. Replaying tests — one command
 
 ```bash
-cd /home/pannet1/gate-nine && uv run python -m app.main
+uv run gn          # the highest-numbered run
+uv run gn 001      # a specific run
 ```
+
+`gn` is a console script in pyproject.toml pointing at `app.main:main`. The long form,
+`uv run python -m app.main 001`, is the same thing.
 
 That is the whole interface. `app/main.py` walks the loop and stops the moment a human is needed:
 
@@ -393,5 +397,5 @@ start a watcher, do not poll for pushes, do not offer to fix the product.
 | `EVENTS_PASSWORD` | HTTP Basic Auth password for that endpoint |
 | `STEP_DELAY` | Seconds to hold between operations so a human can follow. Default 3. |
 
-Run everything from the project root, or `python -m app.main` fails with
+Run everything from the project root, or the import fails with
 `ModuleNotFoundError: No module named 'app'`.

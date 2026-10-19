@@ -271,7 +271,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Run the highest test-case folder, or say why it cannot."
     )
-    parser.add_argument("--run", dest="run_id", help="run id to use (default: the highest)")
+    parser.add_argument(
+        "run_id", nargs="?", help="run id to use, e.g. 001 (default: the highest)"
+    )
+    parser.add_argument("--run", dest="run_opt", help="same as the positional argument")
     parser.add_argument("--runs-root", default=str(DEFAULT_RUNS_ROOT))
     parser.add_argument("--recordings", dest="recordings_dir", default=str(DEFAULT_RECORDINGS_DIR))
     args = parser.parse_args(argv)
@@ -279,9 +282,10 @@ def main(argv: list[str] | None = None) -> int:
     runs_root = Path(args.runs_root)
     recordings_dir = Path(args.recordings_dir)
     ws = Workspace(runs_root=runs_root, recordings_dir=recordings_dir)
+    run_id = args.run_id or args.run_opt
 
     try:
-        run_dir = resolve_run(runs_root, args.run_id)
+        run_dir = resolve_run(runs_root, run_id)
         report = prepare(ws, run_dir)
     except CannotRun as exc:
         print(f"cannot run: {exc}", file=sys.stderr)
