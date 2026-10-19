@@ -10,12 +10,13 @@ from what exists in ``recordings/``, or from ``--cases``.
 
 What it does, in order:
 
-1. **Tidy** — a loose ``recordings/<case>.py`` becomes ``recordings/<case>/<case>.py``,
+1. **Auth** — ``test-cases/auth.json`` points at the one real ``recordings/auth.json``.
+2. **Tidy** — a loose ``recordings/<case>.py`` becomes ``recordings/<case>/<case>.py``,
    a recording whose name drifted from its folder is renamed to match, and its
    ``storage_state`` is pointed at the single system-wide ``auth.json``.
-2. **Link** — each case with a template folder gets a symlink at
+3. **Link** — each case with a recordings folder gets a symlink at
    ``test-cases/<run>/<case> -> ../../recordings/<case>``.
-3. **Report** — every case is complete or not, and ``session.md`` is rewritten
+4. **Report** — every case is complete or not, and ``session.md`` is rewritten
    with that state.
 
 Safety: a recording is never deleted or overwritten. A link is never replaced by
@@ -106,6 +107,32 @@ def case_folders(recordings_dir: Path) -> list[str]:
     )
 
 
+def link_system_auth(runs_root: Path, recordings_dir: Path) -> str:
+    """Ensure test-cases/auth.json points at the one real file in recordings/.
+
+    The real auth state lives at recordings/auth.json, where the human's
+    recording command leaves it. test-cases/auth.json is a convenience link for
+    anything that expects it there. Neither is committed — the gitignore
+    pattern for auth.json covers both, so no dangling link enters the repo.
+    """
+    link = runs_root / "auth.json"
+    expected = Path("..") / "recordings" / "auth.json"
+    normalised = Path(os.path.normpath(expected))
+
+    if link.is_symlink():
+        if Path(os.path.normpath(os.readlink(link))) == normalised:
+            return "already-linked"
+        link.unlink()
+    elif link.exists():
+        return "skipped"
+
+    if not (recordings_dir / "auth.json").exists():
+        return "no-auth-file"
+
+    link.symlink_to(expected)
+    return "created"
+
+
 def link_case(run_dir: Path, recordings_dir: Path, case: str) -> str:
     """Point test-cases/<run>/<case> at recordings/<case>.
 
@@ -136,29 +163,33 @@ def link_cases(run_dir: Path, recordings_dir: Path, cases: list[str]) -> dict[st
     return {case: link_case(run_dir, recordings_dir, case) for case in cases}
 
 
-AUTH_RELATIVE = "../../test-cases/auth.json"
+AUTH_RELATIVE = "../auth.json"
 
 
 def point_recording_at_auth(recordings_dir: Path, case: str) -> str:
     """Rewrite a recording's storage_state to the one system-wide auth.json.
 
-    There is one auth file per system, at test-cases/auth.json. A case folder
-    resolves to recordings/<case>/, so from there the file is
-    ../../test-cases/auth.json. codegen writes a bare "auth.json", which
-    resolves to nothing — fix it rather than copy the secret into every folder.
+    There is one auth file per system, at recordings/auth.json — the lazy
+    human's codegen command puts it there. A case folder resolves to
+    recordings/<case>/, so from there the file is ../auth.json. codegen
+    writes a bare "auth.json", which resolves to nothing — fix it rather
+    than copy the secret into every folder.
     """
     recording = recordings_dir / case / f"{case}{RECORDING_SUFFIX}"
     if not recording.is_file():
         return "no-recording"
 
     source = recording.read_text(encoding="utf-8")
-    pattern = r"""(storage_state=)(["'])auth\.json(["'])"""
+    # Match any storage_state value, not just a bare "auth.json", so the path
+    # converges no matter which form it was last written in.
+    pattern = r"""(storage_state=)(["'])[^"']*(["'])"""
     if not re.search(pattern, source):
         return "nothing-to-rewrite"
 
     updated = re.sub(pattern, rf"\g<1>\g<2>{AUTH_RELATIVE}\g<3>", source)
-    if updated != source:
-        recording.write_text(updated, encoding="utf-8")
+    if updated == source:
+        return "nothing-to-rewrite"
+    recording.write_text(updated, encoding="utf-8")
     return "rewritten"
 
 
@@ -260,6 +291,7 @@ def prepare(
         else {case: point_recording_at_auth(recordings_dir, case) for case in names}
     )
     links = {} if dry_run else link_cases(run_dir, recordings_dir, names)
+    system_auth = "skipped" if dry_run else link_system_auth(runs_root, recordings_dir)
     session = run_dir / SESSION_FILENAME
     if not dry_run:
         write_session(run_dir, brief, names, recordings_dir)
@@ -274,6 +306,7 @@ def prepare(
         "renamed": renamed,
         "auth_fixed": auth_fixed,
         "linked": links,
+        "system_auth": system_auth,
         "states": states,
         "pending": [case for case in names if states[case] == "pending"],
         "session": str(session),

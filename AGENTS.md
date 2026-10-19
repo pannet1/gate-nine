@@ -149,13 +149,18 @@ Login is never part of a test. There is **one `auth.json` per system**, at
 `test-cases/auth.json` — not one per case:
 
 ```bash
-uv run playwright codegen --save-storage=test-cases/auth.json https://<tenant>/login/
+uv run playwright codegen --save-storage=recordings/auth.json https://<tenant>/login/
 ```
 
-The human logs in by hand, then closes. `codegen` writes a bare `storage_state="auth.json"`,
-which resolves to nothing from a case folder. `app.tidy` rewrites that line to
-`../../test-cases/auth.json` — the one real file, never copied and never symlinked into case
-folders.
+The human logs in by hand, then closes. The real file is `recordings/auth.json`, because that
+is where a recording command leaves it. `test-cases/auth.json` is a convenience link to it.
+
+`codegen` writes a bare `storage_state="auth.json"`, which resolves to nothing from a case
+folder. `app.tidy` rewrites that line to `../auth.json`, which resolves correctly through the
+run symlink. Neither the file nor the link is ever committed — the gitignore pattern for
+`auth.json` covers both, so no dangling link enters the repo.
+
+`auth.json` is never moved into a case folder. It belongs to the system, not to a case.
 
 `auth.json` is machine-local and never travels with the repo — each machine generates its own.
 
@@ -201,7 +206,7 @@ what answers "is this case done", link or file.
 **Recording command** — the human records into the case folder, and the URL comes from `url.txt`:
 
 ```bash
-uv run playwright codegen --load-storage=test-cases/auth.json -o recordings/<case>/<case>.py "$(cat recordings/<case>/url.txt)"
+uv run playwright codegen --load-storage=recordings/auth.json -o recordings/<case>/<case>.py "$(cat recordings/<case>/url.txt)"
 ```
 
 The human clicks through the flow. Every action is captured. Then you append the screenshot

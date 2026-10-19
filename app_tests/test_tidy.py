@@ -17,6 +17,7 @@ from app.tidy import (
     point_recording_at_auth,
     case_state,
     link_case,
+    link_system_auth,
     link_cases,
     prepare,
     render_session,
@@ -229,7 +230,7 @@ class PointRecordingAtAuthTests(TempTree):
 
         self.assertEqual(result, "rewritten")
         self.assertIn(
-            'storage_state="../../test-cases/auth.json"',
+            'storage_state="../auth.json"',
             (self.case_dir / "subtasks.py").read_text(encoding="utf-8"),
         )
 
@@ -241,7 +242,7 @@ class PointRecordingAtAuthTests(TempTree):
         point_recording_at_auth(self.recordings, "subtasks")
 
         self.assertIn(
-            "storage_state='../../test-cases/auth.json'",
+            "storage_state='../auth.json'",
             (self.case_dir / "subtasks.py").read_text(encoding="utf-8"),
         )
 
@@ -250,6 +251,19 @@ class PointRecordingAtAuthTests(TempTree):
 
         self.assertEqual(point_recording_at_auth(self.recordings, "subtasks"), "nothing-to-rewrite")
 
+    def test_a_stale_path_is_normalised_too(self) -> None:
+        """The path form has changed before; tidy converges whatever it finds."""
+        (self.case_dir / "subtasks.py").write_text(
+            'context = browser.new_context(storage_state="../../test-cases/auth.json")\n',
+            encoding="utf-8",
+        )
+
+        self.assertEqual(point_recording_at_auth(self.recordings, "subtasks"), "rewritten")
+        self.assertIn(
+            'storage_state="../auth.json"',
+            (self.case_dir / "subtasks.py").read_text(encoding="utf-8"),
+        )
+
     def test_missing_recording_is_reported(self) -> None:
         self.assertEqual(
             point_recording_at_auth(self.recordings, "absent"), "no-recording"
@@ -257,12 +271,57 @@ class PointRecordingAtAuthTests(TempTree):
 
     def test_the_rewritten_path_actually_resolves(self) -> None:
         """The whole point: the recording must find the one auth file at run time."""
-        (self.runs / "auth.json").write_text("{}", encoding="utf-8")
+        (self.recordings / "auth.json").write_text("{}", encoding="utf-8")
         point_recording_at_auth(self.recordings, "subtasks")
         link_case(self.run_dir, self.recordings, "subtasks")
 
         run_dir = os.path.realpath(self.run_dir / "subtasks")
         self.assertTrue(os.path.isfile(os.path.join(run_dir, AUTH_RELATIVE)))
+
+
+class SystemAuthTests(TempTree):
+    """The one real auth.json lives in recordings/; test-cases/ links to it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.make_run()
+        (self.recordings / "auth.json").write_text("{}", encoding="utf-8")
+
+    def test_link_is_created_pointing_at_recordings(self) -> None:
+        result = link_system_auth(self.runs, self.recordings)
+
+        self.assertEqual(result, "created")
+        link = self.runs / "auth.json"
+        self.assertTrue(link.is_symlink())
+        self.assertEqual(Path(os.readlink(link)), Path("../recordings/auth.json"))
+        self.assertTrue(link.resolve().is_file())
+
+    def test_linking_twice_changes_nothing(self) -> None:
+        self.assertEqual(link_system_auth(self.runs, self.recordings), "created")
+        self.assertEqual(link_system_auth(self.runs, self.recordings), "already-linked")
+
+    def test_missing_auth_file_is_reported_not_raised(self) -> None:
+        (self.recordings / "auth.json").unlink()
+
+        self.assertEqual(link_system_auth(self.runs, self.recordings), "no-auth-file")
+        self.assertFalse((self.runs / "auth.json").exists())
+
+    def test_a_real_file_is_never_replaced(self) -> None:
+        real = self.runs / "auth.json"
+        real.write_text('{"mine": true}', encoding="utf-8")
+
+        self.assertEqual(link_system_auth(self.runs, self.recordings), "skipped")
+        self.assertFalse(real.is_symlink())
+
+    def test_a_real_auth_json_stays_flat_in_recordings(self) -> None:
+        """Tidy moves loose .py files, never auth.json into a case folder."""
+        self.make_case("subtasks")
+
+        tidy_recordings(self.recordings)
+
+        self.assertTrue((self.recordings / "auth.json").is_file())
+        self.assertFalse((self.recordings / "auth.json").is_symlink())
+        self.assertFalse((self.recordings / "subtasks" / "auth.json").exists())
 
 
 class CaseStateTests(TempTree):
