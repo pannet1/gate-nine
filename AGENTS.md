@@ -26,17 +26,21 @@ Run this loop. Never skip a step. Never improvise past a handoff.
 1. SCAN      find the highest-numbered folder under test-cases/
 2. BRIEF     locate the .md brief inside it
              └─ no brief? → STOP. Tell the human. Do nothing else.
-3. READ      read the brief and work out what it actually asks for
-4. INFORM    tell the user what you found and what you are doing —
-             in the harness, in your reply. Not in a generated document.
-5. CHECK     is the next step doable by you alone?
-             ├─ yes → do it, then return to 5
-             └─ no  → go to 6
-6. HAND OFF  6a. close any browser you opened
-             6b. state the exact shell command the human should run
-             6c. say what you expect from it
-             6d. WAIT. Do not continue until the human reports back.
-7. LOOP      when every test passes, the loop breaks. Stop and report.
+3. RESUME    read test-cases/<run>/session.md to see where the last run stopped.
+             No session.md yet? Build it from the brief — see §2.6.
+4. NEXT      walk the brief's cases in order. A case with a recording is done —
+             skip it without touching it. The first case without one is the
+             work.
+5. INFORM    tell the user which case you are on and what you are doing, in
+             your reply. Not in a generated document.
+6. CHECK     is the next step doable by you alone?
+             ├─ yes → do it, then return to 6
+             └─ no  → go to 7
+7. HAND OFF  7a. close any browser you opened
+             7b. state the exact shell command the human should run
+             7c. say what you expect from it
+             7d. WAIT. Do not continue until the human reports back.
+8. LOOP      when every case has a recording, the loop breaks. Stop and report.
 ```
 
 **Never generate a workflow document.** Do not write `index.html`, a README, or any other
@@ -83,36 +87,36 @@ When that happens:
 2. **Give one command, exact and runnable.** Real path, real flags, ready to paste. Not a
    sketch. Not "something like".
 3. **Say what you expect from it** — what file should appear, what they should see.
-4. **Record it.** Write what you did and what you handed off to
-   `test-cases/<run>/<case>/session.md` — see §2.6.
+4. **Record it.** Update `test-cases/<run>/session.md` with the state of the run — see §2.6.
 5. **Stop.** Wait. Do not run it yourself. Do not guess what they did. Do not proceed on the
    assumption it worked.
 
 If a command is long, still give one line in the reply. One line beats a paragraph.
 
-### 2.6 The session record
+### 2.6 The session file
 
-A reply scrolls away. The next AI agent picking up this repo has no memory of it. So every
-handoff is also written down.
+`session.md` is the working state of a run. It exists because a reply scrolls away — without
+it, nothing says which case you were on when you stopped, and the next agent starts blind.
 
-**Where:** `test-cases/<run>/<case>/session.md`. Create the case folder if it does not exist
-yet.
-
-**This rule governs `session.md` and nothing else.** How every other file is treated is
-unchanged.
+**Where:** `test-cases/<run>/session.md`. One per run, because it tracks the whole run's cases.
+It sits beside the case folders it refers to.
 
 **Update, never append.** If one is already there, read it, then rewrite it to the current
 state. **History is not wanted.** A cold agent needs to know where things stand, not read a
-diary of how they got there.
+diary of how it got there.
 
-**What goes in it:** the current state, in full enough that a cold agent can pick up without
-re-deriving anything.
+**What goes in it:** the brief's cases as a work list, with state per case.
 
-- What is done
-- What is in progress
-- What is blocked, and what exactly is needed to unblock it
-- Decisions already made, and why — so they are not reopened by accident
+- Every case named in the brief, in the order the brief gives
+- State per case — pending, in progress, complete
+- Which case is being worked on right now
+- What is blocking it, and what exactly unblocks it
+- Decisions already made and why, so they are not reopened by accident
 - The exact next action, runnable
+
+**A case is complete when its recording exists** — `test-cases/<run>/<case>/<case>.py`. Check
+each case in order and skip the complete ones without touching them. The first incomplete case
+is the one to work on.
 
 **Not this:** not a diary, not a plan, not a report on the product, not a summary of the brief.
 
