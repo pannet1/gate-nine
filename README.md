@@ -21,11 +21,13 @@ The brief says **what** to test. The recording says **how**.
 ./install.sh
 ```
 
-Installs Python 3.12 via `uv`, runs `uv sync`, installs Playwright's Chromium,
+Installs Python 3.15 via `uv`, runs `uv sync`, installs Playwright's Chromium,
 and creates `.env` from `.env.example` if it does not exist. `uv` must already
 be installed: <https://docs.astral.sh/uv/getting-started/installation/>
 
-Then fill in `USERNAME` and `PASSWORD` in `.env`. It is ignored by Git.
+Then fill in `HEADLESS`, `SLOW_MO_MS`, `EVENTS_URL`, and `EVENTS_PASSWORD` in
+`.env`. It is ignored by Git. Leave `EVENTS_URL` empty and events are not
+recorded anywhere.
 
 ## Run
 
@@ -48,8 +50,9 @@ needed:
 Exit codes: `0` every case completed, `1` handed off or a case failed, `2`
 cannot run.
 
-`STEP_DELAY` (default 3s) holds between cases so you can watch one browser
-before the next appears.
+`STEP_DELAY` (default 3s) holds between cases, and `SLOW_MO_MS` (default 3000)
+slows every click and fill so you can watch data entry before the next action
+fires.
 
 ### Tidy on its own
 

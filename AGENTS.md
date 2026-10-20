@@ -378,10 +378,12 @@ and wait. Never substitute the base URL, never extrapolate a route from a siblin
 
 Send both, always:
 
-1. **The event stream** — POST to `EVENTS_URL` over HTTP Basic Auth. Configured in `.env` as
-   `EVENTS_URL` and `EVENTS_PASSWORD`. Only the password is validated; the credential is sent
-   as `anyuser:<password>` with a curl `User-Agent`, because the endpoint's bot filter rejects
-   anything else with `403`. No local event log is kept.
+1. **The event stream** — POST to `EVENTS_URL` over HTTP Basic Auth. Read from
+   `.env` (`EVENTS_URL` and `EVENTS_PASSWORD`). Only the password is validated;
+   the credential is sent as `anyuser:<password>` with a curl `User-Agent`,
+   because the endpoint's bot filter rejects anything else with `403`. If
+   `EVENTS_URL` is empty or `.env` is absent, events are not recorded. No local
+   event log is kept.
 2. **A terminal summary** — name the case, the step, and what failed. A number in a stream is
    not a report.
 
@@ -392,15 +394,15 @@ start a watcher, do not poll for pushes, do not offer to fix the product.
 
 ## 7. Environment
 
-`.env` — never read its values aloud, never commit it.
+`.env` — never read its values aloud, never commit it. If `.env` is absent,
+defaults apply from `config.py`.
 
-| Variable | Meaning |
-|---|---|
-| `BASE_URL` | The system under test |
-| `USERNAME` / `PASSWORD` | Tenant login |
-| `EVENTS_URL` | Remote event endpoint. Empty means events are not recorded. |
-| `EVENTS_PASSWORD` | HTTP Basic Auth password for that endpoint |
-| `STEP_DELAY` | Seconds to hold between operations so a human can follow. Default 3. |
+| Variable | Meaning | Default |
+|---|---|---|
+| `HEADLESS` | Run browser headless | `false` — never headless |
+| `SLOW_MO_MS` | Milliseconds between actions so a human can watch | `3000` |
+| `EVENTS_URL` | Remote event endpoint. Empty means events are not recorded. | `""` |
+| `EVENTS_PASSWORD` | HTTP Basic Auth password for that endpoint | `""` |
 
 Run everything from the project root, or the import fails with
 `ModuleNotFoundError: No module named 'app'`.
