@@ -2,7 +2,7 @@
 name = "gate-nine"
 version = "0.1.0"
 description = "Human-supervised black-box functional testing harness for Rachis"
-requires-python = ">=3.12,<3.13"
+requires-python = ">=3.12"
 dependencies = [
   "pydantic-settings>=2.6,<3.0",
   "playwright>=1.48,<2.0",

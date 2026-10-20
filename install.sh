@@ -6,7 +6,7 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-uv python install 3.12
+uv python install 3.15
 uv sync
 uv run playwright install chromium
 
