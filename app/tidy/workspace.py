@@ -19,7 +19,7 @@ from .cases import (
     read_cases,
     write_cases,
 )
-from .files import normalise_recordings, point_recording_at_auth, tidy_recordings
+from .files import append_screenshot_and_slow_mo, normalise_recordings, point_recording_at_auth, tidy_recordings
 from .links import link_cases, link_system_auth
 from .session import SESSION_FILENAME, write_session
 
@@ -65,11 +65,12 @@ class Workspace:
     # -- the work ----------------------------------------------------------
 
     def _prepare_files(self, cases: list[str]) -> None:
-        """Move, rename, and point at auth — everything that needs no judgement."""
+        """Move, rename, point at auth, and make recordings watchable."""
         tidy_recordings(self.recordings_dir, cases)
         normalise_recordings(self.recordings_dir, cases)
         for case in cases:
             point_recording_at_auth(self.recordings_dir, case)
+            append_screenshot_and_slow_mo(self.recordings_dir, case)
 
     def sync_case(self, case: str, run_id: str | None = None, *, dry_run: bool = False) -> dict[str, Any]:
         """Bring one case into one run. Touches nothing else."""

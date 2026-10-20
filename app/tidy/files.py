@@ -12,6 +12,11 @@ from .cases import RECORDING_SUFFIX
 # Where the one system-wide auth.json lives, relative to a case folder.
 AUTH_RELATIVE = "../auth.json"
 
+# Milliseconds the browser pauses between actions so a human can watch.
+# Mirrors STEP_DELAY from config.py so recordings are watchable.
+SLOW_MO_MS = 3000
+
+
 _STORAGE_STATE = r"""(storage_state=)(["'])[^"']*(["'])"""
 
 
@@ -82,5 +87,60 @@ def point_recording_at_auth(recordings_dir: Path, case: str) -> str:
     updated = re.sub(_STORAGE_STATE, rf"\g<1>\g<2>{AUTH_RELATIVE}\g<3>", source)
     if updated == source:
         return "nothing-to-rewrite"
+    recording.write_text(updated, encoding="utf-8")
+    return "rewritten"
+
+
+def append_screenshot_and_slow_mo(recordings_dir: Path, case: str) -> str:
+    """Make a recording watchable by a human.
+
+    Adds ``slow_mo`` to the browser launch so every click and fill is slowed
+    down enough to see, and appends a wait plus a screenshot immediately before
+    the form submit (the last ``.click()`` in the file) so the filled form is
+    captured before it is committed.
+    """
+    recording = recordings_dir / case / f"{case}{RECORDING_SUFFIX}"
+    if not recording.is_file():
+        return "no-recording"
+    source = recording.read_text(encoding="utf-8")
+    if f"slow_mo={SLOW_MO_MS}" in source and "page.screenshot(path=" in source:
+        return "nothing-to-rewrite"
+
+    # Slow every action so a human can watch data entry.
+    source = source.replace(
+        "playwright.chromium.launch(headless=False)",
+        f"playwright.chromium.launch(headless=False, slow_mo={SLOW_MO_MS})",
+    )
+
+    # Only add wait + screenshot if the recording actually uses a page object.
+    if "page" not in source:
+        recording.write_text(source, encoding="utf-8")
+        return "rewritten"
+
+    # Insert wait + screenshot before the last .click() (the form submit),
+    # matching that line's indentation. Fall back to page.close() / context.close()
+    # if there's no click. If there's nothing, append at the end.
+    lines = source.splitlines(keepends=True)
+    click_indices = [i for i, line in enumerate(lines) if ".click()" in line]
+    if click_indices:
+        insert_at = click_indices[-1]
+        indent = lines[insert_at][: len(lines[insert_at]) - len(lines[insert_at].lstrip())]
+    else:
+        close_targets = []
+        for pattern in ("page.close()", "context.close()"):
+            close_targets.extend(i for i, line in enumerate(lines) if pattern in line)
+        insert_at = close_targets[0] if close_targets else len(lines)
+        if insert_at < len(lines):
+            indent = lines[insert_at][: len(lines[insert_at]) - len(lines[insert_at].lstrip())]
+        else:
+            indent = ""
+
+    screenshot_block = (
+        f"{indent}page.wait_for_timeout({SLOW_MO_MS})\n"
+        f"{indent}page.screenshot(path=\"screenshot.png\")\n"
+    )
+    lines.insert(insert_at, screenshot_block)
+    updated = "".join(lines)
+
     recording.write_text(updated, encoding="utf-8")
     return "rewritten"
