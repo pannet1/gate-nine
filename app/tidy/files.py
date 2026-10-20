@@ -7,14 +7,11 @@ create. They never delete a recording.
 import re
 from pathlib import Path
 
+from ..config import settings
 from .cases import RECORDING_SUFFIX
 
 # Where the one system-wide auth.json lives, relative to a case folder.
 AUTH_RELATIVE = "../auth.json"
-
-# Milliseconds the browser pauses between actions so a human can watch.
-# Mirrors STEP_DELAY from config.py so recordings are watchable.
-SLOW_MO_MS = 3000
 
 
 _STORAGE_STATE = r"""(storage_state=)(["'])[^"']*(["'])"""
@@ -103,13 +100,13 @@ def append_screenshot_and_slow_mo(recordings_dir: Path, case: str) -> str:
     if not recording.is_file():
         return "no-recording"
     source = recording.read_text(encoding="utf-8")
-    if f"slow_mo={SLOW_MO_MS}" in source and "page.screenshot(path=" in source:
+    if f"slow_mo={settings.slow_mo_ms}" in source and "page.screenshot(path=" in source:
         return "nothing-to-rewrite"
 
     # Slow every action so a human can watch data entry.
     source = source.replace(
         "playwright.chromium.launch(headless=False)",
-        f"playwright.chromium.launch(headless=False, slow_mo={SLOW_MO_MS})",
+        f"playwright.chromium.launch(headless=False, slow_mo={settings.slow_mo_ms})",
     )
 
     # Only add wait + screenshot if the recording actually uses a page object.
@@ -136,7 +133,7 @@ def append_screenshot_and_slow_mo(recordings_dir: Path, case: str) -> str:
             indent = ""
 
     screenshot_block = (
-        f"{indent}page.wait_for_timeout({SLOW_MO_MS})\n"
+        f"{indent}page.wait_for_timeout({settings.slow_mo_ms})\n"
         f"{indent}page.screenshot(path=\"screenshot.png\")\n"
     )
     lines.insert(insert_at, screenshot_block)

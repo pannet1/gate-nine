@@ -14,8 +14,9 @@ class Settings(BaseSettings):
     # Seconds the visible browser holds after each step, so eyes can keep up
     # with what was just entered. The run is unattended; this is its only pause.
     step_delay: float = 3.0
+    slow_mo_ms: int = 3000
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=False, extra="ignore")
 
 
 settings = Settings()
