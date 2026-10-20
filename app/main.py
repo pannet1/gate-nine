@@ -300,7 +300,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"cannot run: {exc}", file=sys.stderr)
         return EXIT_CANNOT_RUN
 
-    print(f"run {run_dir.name} — {len(report.get('ask_url_for', []))} need a url")
+    print(f"run {run_dir.name}")
 
     if report["missing_py"] or report["ask_url_for"]:
         for line in handoff_lines(report, run_dir, recordings_dir):
