@@ -18,7 +18,7 @@ is how to change it.
 
 ```
 app/
-  main.py        the loop, and the console script `uv run main`
+  main.py        the loop`
   tidy/          the workspace, split by job:
                    cases.py      the case list, and the three-way split
                    files.py      move, rename, auth path
@@ -37,7 +37,7 @@ app_tests/       the test suite
 ## Commands
 
 ```bash
-uv run main [run_id]                # the loop
+uv run python -m app.main [run_id]                # the loop
 uv run python -m pytest             # the tests
 uv run python -m app.tidy [case] [run]  # the workspace, on its own
 node /home/pannet1/.agents/skills/design-taste-frontend/scripts/lint.mjs index.html

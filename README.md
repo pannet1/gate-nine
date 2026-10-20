@@ -30,8 +30,8 @@ Then fill in `USERNAME` and `PASSWORD` in `.env`. It is ignored by Git.
 ## Run
 
 ```bash
-uv run main          # the highest-numbered run under test-cases/
-uv run main 001      # a specific run
+uv run python -m app.main          # the highest-numbered run under test-cases/
+uv run python -m app.main 001      # a specific run
 ```
 
 That is the whole interface. It walks the loop and stops the moment a human is

@@ -321,12 +321,9 @@ rewrite interactions, and you do not touch selectors.
 ## 5. Replaying tests — one command
 
 ```bash
-uv run main        # the highest-numbered run
-uv run main 001    # a specific run
+uv run python -m app.main        # the highest-numbered run
+uv run python -m app.main 001    # a specific run
 ```
-
-`main` is a console script in pyproject.toml pointing at `app.main:main`. The long form,
-`uv run python -m app.main 001`, is the same thing.
 
 That is the whole interface. `app/main.py` walks the loop and stops the moment a human is needed:
 

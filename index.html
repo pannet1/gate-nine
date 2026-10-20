@@ -400,7 +400,7 @@ a.folder:hover{transform:translateX(16px);filter:brightness(1.06)}
     </div>
 
     <div class="term" data-ui role="img" aria-label="Terminal output of the main loop, showing a case failing with a Playwright TargetClosedError">
-      <div class="bar"><i></i><i></i><i></i><b>gate-nine — uv run main</b></div>
+      <div class="bar"><i></i><i></i><i></i><b>gate-nine — uv run python -m app.main</b></div>
       <pre class="out">run 002 — 0 need a url
 1 case(s) recorded — running them now
 
@@ -440,7 +440,7 @@ a.folder:hover{transform:translateX(16px);filter:brightness(1.06)}
     </div>
 
     <div class="term reveal" data-ui style="margin-top:56px" role="img" aria-label="Terminal output of the handoff: the cases still needing a URL, each with the runnable command to supply it">
-      <div class="bar"><i></i><i></i><i></i><b>gate-nine — uv run main</b></div>
+      <div class="bar"><i></i><i></i><i></i><b>gate-nine — uv run python -m app.main</b></div>
       <pre class="out">run 002 — <span class="warn">2 need a url</span>
 
 These cases need a URL before anything can be recorded:
@@ -538,7 +538,7 @@ These cases need a URL before anything can be recorded:
     <div class="tiles">
       <div class="tile lead reveal">
         <span class="t"><code>app/main.py</code></span>
-        <span class="d">The whole loop in one file. Finds the run, requires the case list, calls tidy, and either hands over a command or plays every case back one at a time. This is the <code>uv run main</code> you type.</span>
+        <span class="d">The whole loop in one file. Finds the run, requires the case list, calls tidy, and either hands over a command or plays every case back one at a time. This is the <code>uv run python -m app.main</code> you type.</span>
       </div>
       <div class="tile reveal">
         <span class="t"><code>tidy/workspace.py</code></span>
