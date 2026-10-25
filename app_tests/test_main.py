@@ -1,7 +1,8 @@
 """The one command. app/main.py, end to end, without a browser.
 
-Every test drives the real loop over a temp tree. Only step 5 is faked — the
-runner is a parameter, so nothing here opens Chromium.
+Every test drives the real loop over a temp tree. Only the two browser steps
+are faked — the runner is a parameter, and sign-in is patched — so nothing here
+opens Chromium.
 """
 
 import io
@@ -25,6 +26,35 @@ from app.main import (
     run_cases,
 )
 from app.tidy import Workspace
+
+
+def ok_signer() -> dict:
+    """A sign-in that succeeded. Patched in wherever the loop signs in."""
+    return {"action": "auth", "ok": True, "saved": "recordings/auth.json", "detail": "signed in"}
+
+
+def fake_auth(expires_in: float = 600.0) -> str:
+    """A session file with a structurally real access token.
+
+    The loop reads the JWT expiry before running a case, so a fixture that is
+    just ``{}`` no longer stands in for a signed-in browser.
+    """
+    import base64
+    import json
+    import time
+
+    def segment(claims: dict) -> str:
+        raw = json.dumps(claims).encode()
+        return base64.urlsafe_b64encode(raw).decode().rstrip("=")
+
+    token = ".".join(
+        [
+            segment({"alg": "HS256", "typ": "JWT"}),
+            segment({"exp": time.time() + expires_in, "email": "tester@example.com"}),
+            "signature",
+        ]
+    )
+    return json.dumps({"cookies": [{"name": "at", "value": token, "domain": ".example"}], "origins": []})
 
 
 class Tree(unittest.TestCase):
@@ -226,6 +256,61 @@ class RunCasesTests(Tree):
 
         self.assertEqual(slept, [2.5], "one pause, between the cases, not before the first")
 
+    def test_sign_in_runs_before_every_case(self) -> None:
+        """Each case gets its own session — a cookie jar does not carry over."""
+        run_dir = self.make_run("002", cases=["one", "two"])
+        for case in ("one", "two"):
+            self.make_case(case)
+        order: list[str] = []
+
+        def fake_runner(case: str, _run_dir: Path) -> dict:
+            order.append(f"run:{case}")
+            return {"case": case, "status": "passed"}
+
+        def fake_signer() -> dict:
+            order.append("sign-in")
+            return {"action": "auth", "ok": True, "saved": "recordings/auth.json"}
+
+        run_cases(
+            ["one", "two"], run_dir, runner=fake_runner, signer=fake_signer, delay=0
+        )
+
+        self.assertEqual(order, ["sign-in", "run:one", "sign-in", "run:two"])
+
+    def test_a_failed_sign_in_stops_the_run(self) -> None:
+        """Every case after a dead session bounces to /login/ and lies."""
+        run_dir = self.make_run("002", cases=["one", "two"])
+        for case in ("one", "two"):
+            self.make_case(case)
+        ran: list[str] = []
+
+        def fake_runner(case: str, _run_dir: Path) -> dict:
+            ran.append(case)
+            return {"case": case, "status": "passed"}
+
+        summary = run_cases(
+            ["one", "two"],
+            run_dir,
+            runner=fake_runner,
+            signer=lambda: {"action": "auth", "ok": False, "detail": "no login form"},
+            delay=0,
+        )
+
+        self.assertEqual(ran, [], "no case runs on a session that never established")
+        self.assertEqual(summary["results"][0]["status"], "auth-failed")
+        self.assertEqual(summary["failed"], summary["results"])
+
+    def test_no_signer_means_no_sign_in(self) -> None:
+        """run_cases is callable on its own, as the tests and any caller do."""
+        run_dir = self.make_run("002", cases=["one"])
+        self.make_case("one")
+
+        summary = run_cases(
+            ["one"], run_dir, runner=lambda c, d: {"case": c, "status": "passed"}, delay=0
+        )
+
+        self.assertEqual([r["status"] for r in summary["results"]], ["passed"])
+
 
 class SessionStaysAWorkListTests(Tree):
     """session.md says what to do next. It never holds a verdict."""
@@ -289,14 +374,44 @@ class MainTests(Tree):
         self.make_run("002", cases=["effort-hours", "subtasks"])
         for case in ("effort-hours", "subtasks"):
             self.make_case(case)
-        (self.recordings / "auth.json").write_text("{}", encoding="utf-8")
+        (self.recordings / "auth.json").write_text(fake_auth(), encoding="utf-8")
 
-        code, out, _ = self.call_main()
+        with mock.patch.object(main_module, "sign_in_and_save", ok_signer):
+            code, out, _ = self.call_main()
 
         self.assertEqual(code, EXIT_OK, out)
         session = (self.runs / "002" / "session.md").read_text()
         self.assertIn("Every case has a recording.", session)
         self.assertNotIn("passed", session, "session.md never holds a verdict")
+
+    def test_an_expired_session_stops_the_run(self) -> None:
+        """A dead token means every case bounces to /login/ and lies green."""
+        self.make_run("002", cases=["one", "two"])
+        for case in ("one", "two"):
+            self.make_case(case)
+        (self.recordings / "auth.json").write_text(fake_auth(expires_in=-60), encoding="utf-8")
+        ran: list[str] = []
+
+        with mock.patch.object(main_module, "sign_in_and_save", ok_signer), mock.patch.object(
+            main_module, "run_case", lambda case, _d: ran.append(case) or {"case": case, "status": "passed"}
+        ):
+            code, out, _ = self.call_main()
+
+        self.assertEqual(code, EXIT_HANDOFF)
+        self.assertEqual(ran, [], "no case runs on an expired session")
+        self.assertIn("expired", out)
+
+    def test_a_session_without_a_token_stops_the_run(self) -> None:
+        """{} is not a signed-in browser, and must not be treated as one."""
+        self.make_run("002", cases=["one"])
+        self.make_case("one")
+        (self.recordings / "auth.json").write_text("{}", encoding="utf-8")
+
+        with mock.patch.object(main_module, "sign_in_and_save", ok_signer):
+            code, out, _ = self.call_main()
+
+        self.assertEqual(code, EXIT_HANDOFF)
+        self.assertIn("access token", out)
 
     def test_tidy_links_before_the_case_runs(self) -> None:
         run_dir = self.make_run("002", cases=["lazy"])

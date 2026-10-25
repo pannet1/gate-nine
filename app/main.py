@@ -25,11 +25,13 @@ from typing import Any, Callable
 
 from .config import settings
 from .events import send_event
+from .login import DEFAULT_RECORDINGS_DIR, session_status, sign_in_and_save
 from .planner import find_latest_run
 from .tidy import Workspace, read_cases, url_request
 
 DEFAULT_RUNS_ROOT = Path("test-cases")
-DEFAULT_RECORDINGS_DIR = Path("recordings")
+# DEFAULT_RECORDINGS_DIR comes from .login — one definition of where the
+# system-wide auth.json lives, so the loop and the session check cannot drift.
 
 RECORDING_SUFFIX = ".py"
 
@@ -211,10 +213,18 @@ def run_cases(
     cases: list[str],
     run_dir: Path,
     runner: Callable[[str, Path], dict[str, Any]] = run_case,
+    signer: Callable[[], dict[str, Any]] | None = None,
+    recordings_dir: Path = DEFAULT_RECORDINGS_DIR,
     delay: float | None = None,
 ) -> dict[str, Any]:
     """Every case, one at a time, in cases.yml order. Never parallel — the
     tenant is shared state.
+
+    Login runs before every case, and each time it rewrites recordings/auth.json.
+    A session is short-lived and each case launches its own browser, so a case
+    should never inherit a cookie jar that expired while an earlier case ran.
+    A failed sign-in stops the loop: every case after it would bounce to
+    /login/ and report itself as broken, which is noise, not signal.
 
     A failing case does not stop the others: each one launches its own browser,
     so one broken selector is one broken case, not a broken run. The loop
@@ -228,6 +238,29 @@ def run_cases(
     for index, case in enumerate(cases):
         if index and pause:
             time.sleep(pause)
+        if signer is not None:
+            auth = signer()
+            if not auth.get("ok"):
+                results.append(
+                    {
+                        "case": case,
+                        "status": "auth-failed",
+                        "detail": [str(auth.get("detail", "sign-in failed"))],
+                    }
+                )
+                _log(run_dir.name, "case_auth_failed", {"case": case, "detail": auth.get("detail")})
+                break
+            _log(run_dir.name, "auth_ok", {"case": case, "saved": auth.get("saved")})
+            # The tenant revokes every earlier session on a new sign-in, and the
+            # access token is short-lived. A case on a dead session bounces to
+            # /login/, screenshots the sign-in form, and exits 0 — reporting a
+            # broken run as green. Check the token is alive before running.
+            status = session_status(recordings_dir)
+            if not status.get("ok"):
+                detail = [str(status.get("reason", "session is not usable"))]
+                results.append({"case": case, "status": "auth-failed", "detail": detail})
+                _log(run_dir.name, "case_auth_failed", {"case": case, "detail": detail[0]})
+                break
         result = runner(case, run_dir)
         results.append(result)
         # One event per case as it happens, so a run that dies part-way still
@@ -311,7 +344,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{len(cases)} case(s) recorded — running them now")
     _log(run_dir.name, "run_start", {"cases": len(cases)})
 
-    summary = run_cases(cases, run_dir)
+    summary = run_cases(
+        cases,
+        run_dir,
+        signer=sign_in_and_save,
+        recordings_dir=Path(args.recordings_dir),
+    )
     report_results(summary)
     _log(
         run_dir.name,
